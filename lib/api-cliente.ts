@@ -1,0 +1,97 @@
+'use client'
+
+import { EnrollmentData, PagamentoMetodo, PagamentoStatus } from '@/lib/enrollment'
+
+/**
+ * Chamadas do navegador para as rotas do funil.
+ *
+ * Nenhuma delas recebe id de inscrição: a sessão vem do cookie httpOnly que
+ * o servidor gravou, então o navegador não tem como forjar outra inscrição.
+ */
+
+export type Inscricao = {
+  id: string
+  nome: string
+  cpfMascarado: string
+  telefone: string
+  email: string | null
+  status: 'rascunho' | 'aguardando_pagamento' | 'paga' | 'triagem_concluida' | 'cancelada'
+  numeroInscricao: string | null
+  passosRespondidos: number
+}
+
+export type ItemDePreco = { id: string; rotulo: string; detalhe?: string; centavos: number }
+
+export type Cobranca = {
+  id: string
+  metodo: PagamentoMetodo
+  parcelas: number
+  valorCentavos: number
+  itens: ItemDePreco[] | null
+  status: PagamentoStatus
+  pixCopiaCola: string | null
+  recusaMotivo?: string | null
+  criadoEm: string
+  minutosParaExpirar: number
+}
+
+export class ErroDaApi extends Error {
+  constructor(public status: number, mensagem: string) {
+    super(mensagem)
+    this.name = 'ErroDaApi'
+  }
+}
+
+async function pedir<T>(url: string, init?: RequestInit): Promise<T> {
+  const resposta = await fetch(url, {
+    ...init,
+    headers: { 'Content-Type': 'application/json', ...init?.headers },
+  })
+  const corpo = await resposta.json().catch(() => ({}))
+  if (!resposta.ok) throw new ErroDaApi(resposta.status, corpo?.erro ?? 'Falha na comunicação com o servidor.')
+  return corpo as T
+}
+
+export const salvarInscricao = (dados: EnrollmentData) =>
+  pedir<{ id: string; status: string; numeroInscricao: string | null; jaPaga: boolean }>(
+    '/api/inscricoes',
+    { method: 'POST', body: JSON.stringify(dados) },
+  )
+
+export const buscarInscricao = () => pedir<Inscricao>('/api/inscricoes/atual')
+
+export const consultarCpf = (cpf: string) =>
+  pedir<{ existe: boolean; primeiroNome?: string; telefoneFinal?: string; jaPaga?: boolean }>(
+    `/api/inscricoes/consulta?cpf=${encodeURIComponent(cpf)}`,
+  )
+
+export const criarCobranca = (payload: {
+  metodo: PagamentoMetodo
+  parcelas?: number
+  token?: string
+  bandeira?: string | null
+  ultimos4?: string
+}) => pedir<Cobranca>('/api/pagamentos', { method: 'POST', body: JSON.stringify(payload) })
+
+export const buscarCobranca = () => pedir<Cobranca & { existe: boolean }>('/api/pagamentos/atual')
+
+export const confirmarCobranca = (pagamentoId: string) =>
+  pedir<{ numeroInscricao: string | null; jaConfirmado: boolean }>(
+    '/api/pagamentos/confirmar',
+    { method: 'POST', body: JSON.stringify({ pagamentoId }) },
+  )
+
+export const encerrarCobranca = (pagamentoId: string, desfecho: 'expirado' | 'recusado', motivo?: string) =>
+  pedir<{ alterado: boolean; status: string | null }>(
+    '/api/pagamentos/desfecho',
+    { method: 'POST', body: JSON.stringify({ pagamentoId, desfecho, motivo }) },
+  )
+
+export const buscarTriagem = () =>
+  pedir<{ respostas: Record<string, unknown>; concluida: boolean }>('/api/triagem')
+
+export const salvarResposta = (passo: number, resposta: unknown) =>
+  pedir<{ salvo: boolean; concluida: boolean }>('/api/triagem', {
+    method: 'PUT',
+    body: JSON.stringify({ passo, resposta }),
+  })
