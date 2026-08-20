@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server'
-import { MAX_PARCELAS, MINUTOS_PARA_EXPIRAR, PIX_CODE, PRECO_CENTAVOS } from '@/lib/enrollment'
+import {
+  COMPOSICAO_PRECO, MAX_PARCELAS, MINUTOS_PARA_EXPIRAR, PIX_RECEBEDOR, PRECO_CENTAVOS,
+} from '@/lib/enrollment'
+import { gerarPixCopiaCola } from '@/lib/pix'
 import { corpo, erro, rota } from '@/lib/http'
 import { lerInscricaoId } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabase/server'
@@ -49,19 +52,27 @@ export function POST(request: Request) {
       return erro('Últimos dígitos do cartão inválidos.', 422)
     }
 
+    // O txid identifica a cobrança para o provedor e entra no próprio
+    // payload do PIX, o que permite conciliar o pagamento no webhook.
+    const txid = crypto.randomUUID().replace(/-/g, '').slice(0, 25)
+
     const { data, error } = await supabaseServer()
       .from('pagamentos')
       .insert({
         inscricao_id: inscricaoId,
         valor_centavos: PRECO_CENTAVOS,
+        itens: COMPOSICAO_PRECO,
         metodo,
         parcelas,
         status: 'pendente',
+        txid: metodo === 'pix' ? txid : null,
         bandeira: metodo === 'cartao' ? (body.bandeira ?? null) : null,
         ultimos4: metodo === 'cartao' ? (body.ultimos4 ?? null) : null,
-        pix_copia_cola: metodo === 'pix' ? PIX_CODE : null,
+        pix_copia_cola: metodo === 'pix'
+          ? gerarPixCopiaCola({ ...PIX_RECEBEDOR, valorCentavos: PRECO_CENTAVOS, txid })
+          : null,
       })
-      .select('id, metodo, parcelas, valor_centavos, status, pix_copia_cola, criado_em')
+      .select('id, metodo, parcelas, valor_centavos, itens, status, pix_copia_cola, criado_em')
       .single()
 
     if (error || !data) {
@@ -74,6 +85,7 @@ export function POST(request: Request) {
       metodo: data.metodo,
       parcelas: data.parcelas,
       valorCentavos: data.valor_centavos,
+      itens: data.itens,
       status: data.status,
       pixCopiaCola: data.pix_copia_cola,
       criadoEm: data.criado_em,

@@ -219,3 +219,12 @@ h1,h2,h3 { font-family: var(--font-archivo), sans-serif; line-height: 1.08; lett
 .spin { width: 18px; height: 18px; animation: girar 1s linear infinite; }
 @keyframes girar { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spin { animation-duration: 3s; } }
+
+.price-breakdown { border-block: 1px solid var(--rule); margin: 18px 0; padding: 4px 0; }
+.price-line { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding: 10px 0; }
+.price-line + .price-line { border-top: 1px solid var(--rule); }
+.price-line dt { display: flex; flex-direction: column; gap: 2px; font-size: 14px; font-weight: 650; }
+.price-line dt small { color: var(--ink-soft); font-size: 12px; font-weight: 400; }
+.price-line dd { margin: 0; font: 650 15px var(--font-mono); white-space: nowrap; }
+.price-line.total dt { font-weight: 800; }
+.price-line.total dd { font-weight: 800; }

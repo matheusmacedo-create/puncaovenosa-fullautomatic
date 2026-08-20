@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { Check, CreditCard, Loader2, QrCode, X } from 'lucide-react'
 import { ClinicalHeader, RedCross, VisualQr } from '@/components/clinical-header'
 import { CardForm } from '@/components/card-form'
+import { PriceBreakdown } from '@/components/price-breakdown'
 import {
   bandeiraDoCartao, DadosCartao, digits, EnrollmentData, fieldError, formatarBRL,
   loadJson, maskCpf, maskPhone, PagamentoMetodo, PRECO_CENTAVOS, saveJson, STORAGE_KEYS,
@@ -243,10 +244,11 @@ function DataStage({ data, errors, cadastro, enviando, erroGeral, update, blur, 
           {errors.highSchool && <p className="error" role="alert">{errors.highSchool}</p>}
         </div>
       </div>
+      <PriceBreakdown />
       {erroGeral && <p className="error" role="alert">{erroGeral}</p>}
     </div>
     <footer className="sheet-footer">
-      <div className="price-summary"><small>Total</small><strong>{formatarBRL(PRECO_CENTAVOS)}</strong></div>
+      <div className="price-summary"><small>Total à vista</small><strong>{formatarBRL(PRECO_CENTAVOS)}</strong></div>
       <button className="primary-button" onClick={submit} disabled={enviando}>{enviando ? <><Loader2 className="spin" /> Salvando…</> : 'Ir para o pagamento'}</button>
     </footer>
   </>
@@ -269,6 +271,7 @@ function PaymentStage({ metodo, cobranca, copied, restante, enviando, erroGeral,
     <h2 id="sheet-title">Pagamento</h2>
     <p className="payment-value">{formatarBRL(PRECO_CENTAVOS)}</p>
     <p className="receiver">Recebedor: Cruz Vermelha Brasileira — Filial RJ</p>
+    <PriceBreakdown itens={cobranca?.itens ?? undefined} total={cobranca?.valorCentavos} />
 
     <div className="method-tabs" role="tablist" aria-label="Meio de pagamento">
       <button role="tab" aria-selected={metodo === 'pix'} className={`method-tab ${metodo === 'pix' ? 'selected' : ''}`} onClick={() => trocarMetodo('pix')}><QrCode /> PIX</button>

@@ -12,8 +12,23 @@ export const STORAGE_KEYS = {
   triage: 'cvb-triage',
 } as const
 
-export const PIX_CODE =
-  '00020126580014BR.GOV.BCB.PIX0136cvbrj-puncao-venosa-20265204000053039865406249.005802BR5925CRUZ VERMELHA BRASILEIRA6009RIO DE JANEIRO62140510CVB202600016304A13F'
+/**
+ * Recebedor do PIX.
+ *
+ * [INTEGRAÇÃO] `chave` é um placeholder. Antes de ir ao ar, troque pela
+ * chave real da Cruz Vermelha (CNPJ, e-mail ou chave aleatória) — o
+ * pagamento não cai numa chave que não existe.
+ *
+ * O código copia-e-cola é montado por cobrança em `lib/pix.ts`, e não
+ * escrito à mão: o payload anterior tinha os tamanhos de campo errados, o
+ * que impedia o app do banco de ler o valor e deixava o pagador digitar
+ * qualquer quantia.
+ */
+export const PIX_RECEBEDOR = {
+  chave: 'cvbrj-puncao-venosa-2026',
+  nome: 'CRUZ VERMELHA BRASILEIRA',
+  cidade: 'RIO DE JANEIRO',
+} as const
 
 export const digits = (value: string) => value.replace(/\D/g, '')
 
@@ -80,7 +95,21 @@ export const triageQuestions = [
 // Fonte única do valor do curso. Tudo (interface, PIX, cartão e o registro
 // em `pagamentos.valor_centavos`) deriva daqui.
 
-export const PRECO_CENTAVOS = 24900
+/**
+ * Composição do preço, item a item.
+ *
+ * O aluno paga o total à vista. A separação existe para ficar explícito no
+ * checkout o que ele está comprando — e porque matrícula e curso são coisas
+ * distintas, que um dia podem ser cobradas em momentos diferentes.
+ */
+export const COMPOSICAO_PRECO = [
+  { id: 'matricula', rotulo: 'Matrícula', detalhe: 'Reserva da vaga e cadastro', centavos: 9900 },
+  { id: 'curso', rotulo: 'Curso presencial', detalhe: '8 horas na sede CVB-RJ', centavos: 15000 },
+] as const
+
+/** Total cobrado. Derivado dos itens — nunca escreva o valor solto. */
+export const PRECO_CENTAVOS = COMPOSICAO_PRECO.reduce((soma, item) => soma + item.centavos, 0)
+
 export const MAX_PARCELAS = 12
 
 export const formatarBRL = (centavos: number) =>

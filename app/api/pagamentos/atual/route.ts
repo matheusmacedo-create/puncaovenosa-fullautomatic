@@ -16,7 +16,7 @@ export function GET() {
 
     const { data, error } = await supabaseServer()
       .from('pagamentos')
-      .select('id, metodo, parcelas, valor_centavos, status, pix_copia_cola, recusa_motivo, criado_em')
+      .select('id, metodo, parcelas, valor_centavos, itens, status, pix_copia_cola, recusa_motivo, criado_em')
       .eq('inscricao_id', inscricaoId)
       .order('criado_em', { ascending: false })
       .limit(1)
@@ -34,6 +34,7 @@ export function GET() {
       metodo: data.metodo,
       parcelas: data.parcelas,
       valorCentavos: data.valor_centavos,
+      itens: data.itens,
       status: data.status,
       pixCopiaCola: data.pix_copia_cola,
       recusaMotivo: data.recusa_motivo,

@@ -20,11 +20,14 @@ export type Inscricao = {
   passosRespondidos: number
 }
 
+export type ItemDePreco = { id: string; rotulo: string; detalhe?: string; centavos: number }
+
 export type Cobranca = {
   id: string
   metodo: PagamentoMetodo
   parcelas: number
   valorCentavos: number
+  itens: ItemDePreco[] | null
   status: PagamentoStatus
   pixCopiaCola: string | null
   recusaMotivo?: string | null

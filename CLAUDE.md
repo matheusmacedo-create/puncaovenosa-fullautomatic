@@ -35,7 +35,9 @@ Use **pnpm**, nunca npm ou yarn — o lockfile é do pnpm e o CI roda com `--fro
 - RLS está ligada e **forçada** nas três tabelas, sem policy nenhuma. Isso é proposital: nega tudo pela chave publicável. Não adicione policy sem entender que isso abriria acesso direto do navegador.
 - **Dado de cartão nunca chega ao servidor.** `POST /api/pagamentos` rejeita corpos com `numero`, `cvv`, `validade` ou `pan`. Se precisar mexer no cartão, a tokenização é no navegador.
 - Ao escrever função PL/pgSQL com `returns table`, não repita nome de coluna da tabela nos campos de retorno sem qualificar com alias — o Postgres aborta com "column reference is ambiguous". Já aconteceu em `confirmar_pagamento`.
-- Cobrança no provedor, tokenização e o payload PIX ainda são **simulados**. Trechos marcados com `[INTEGRAÇÃO]` sinalizam onde entra o provedor de verdade.
+- Cobrança no provedor e tokenização ainda são **simuladas**. Trechos marcados com `[INTEGRAÇÃO]` sinalizam onde entra o provedor de verdade. A chave PIX em `PIX_RECEBEDOR` é placeholder.
+- Preço: R$ 99 de matrícula + R$ 150 de curso = R$ 249, cobrados juntos. `PRECO_CENTAVOS` é **derivado** de `COMPOSICAO_PRECO`; não escreva o total solto em lugar nenhum. Uma constraint no banco exige que `pagamentos.itens` feche com `valor_centavos`.
+- O código PIX é montado em `lib/pix.ts`, nunca à mão. O payload EMV é TLV (tag, tamanho, valor): um tamanho errado desalinha o leitor, o app do banco não acha o valor e libera o pagador para digitar qualquer quantia. Foi exatamente esse o bug do código estático anterior.
 
 ## Fluxo de trabalho
 

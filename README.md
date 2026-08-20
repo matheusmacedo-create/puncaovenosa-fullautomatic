@@ -6,13 +6,27 @@ Aplicação Next.js do funil de inscrição do **Curso de Punção Venosa (8h, p
 
 | Etapa | Rota | O que acontece |
 | --- | --- | --- |
-| 1. Captura | `/` | Landing + bottom sheet de dados (nome, WhatsApp, CPF, pré-requisito de ensino médio) |
+| 1. Captura | `/` | Landing + bottom sheet de dados (nome, WhatsApp, CPF, pré-requisito de ensino médio) e composição do preço |
 | 2. Pagamento | `/?etapa=pagamento` | Escolha entre PIX (copia-e-cola com timer de 30 min) e cartão (com parcelamento). Estados `pendente / confirmado / expirado / recusado` |
 | 3. Confirmação | `/?etapa=confirmado` | Vaga garantida — convite para a triagem |
 | 4. Triagem | `/triagem/1` … `/triagem/8` | CEP, perfil profissional, turno, dias, urgência, e-mail opcional, origem e confirmação final |
 | 5. Ficha do aluno | `/minha-inscricao` | Comprovante com QR, dados do curso e local — instalável como PWA e imprimível |
 
 A sessão do aluno é um cookie `httpOnly` (`cvb_inscricao`) com o id da inscrição — não há login. O `localStorage` (`cvb-enrollment`, `cvb-triage`) continua como cache do rascunho, mas **o servidor é a fonte da verdade**.
+
+## Preço
+
+| Item | Valor |
+| --- | --- |
+| Matrícula | R$ 99,00 |
+| Curso presencial, 8h | R$ 150,00 |
+| **Total à vista** | **R$ 249,00** |
+
+O aluno paga o total de uma vez, em PIX ou cartão. A composição é definida em `COMPOSICAO_PRECO` (`lib/enrollment.ts`) e o total é **derivado da soma** — nunca escreva o valor solto.
+
+Cada cobrança grava sua própria composição na coluna `pagamentos.itens`, e uma constraint no banco exige que os itens fechem com `valor_centavos`. Isso impede que uma cobrança de R$ 249 seja registrada com itens somando R$ 99.
+
+Cobrar apenas a matrícula é aceito pelo modelo, mas **não está implementado no funil** — fica disponível para um downsell futuro.
 
 ## Arquitetura de dados
 
@@ -97,7 +111,7 @@ Persistência, consulta por CPF, número de inscrição e triagem já são reais
 
 - **Cobrança no provedor** — `POST /api/pagamentos` registra a intenção, mas não chama a Único. É onde `provedor_id` passa a ser preenchido.
 - **Tokenização do cartão** — `components/card-form.tsx` valida e formata, mas ainda não tokeniza; hoje envia um token simulado.
-- **Código PIX** — `PIX_CODE` em `lib/enrollment.ts` é estático e **está com o payload EMV malformado** (ver issue aberta); deve ser gerado por cobrança, com os lengths e o CRC16 corretos.
+- **Chave PIX** — `PIX_RECEBEDOR.chave` em `lib/enrollment.ts` é um placeholder. O payload já é montado corretamente por cobrança em `lib/pix.ts`, mas o dinheiro só cai quando a chave real da Cruz Vermelha entrar ali.
 - **Webhook** — `POST /api/webhooks/pix` está implementado e protegido por `PIX_WEBHOOK_TOKEN`, mas troque a comparação de token pela verificação de assinatura que o provedor documentar.
 - **QR Code** — o QR de `components/clinical-header.tsx` é visual e não codifica dados reais.
 
