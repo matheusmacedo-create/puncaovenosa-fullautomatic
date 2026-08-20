@@ -53,7 +53,7 @@ Três funções no banco mantêm atômico o que seria uma sequência de queries:
 | `GET /api/inscricoes/consulta` | Diz se um CPF já tem cadastro (resposta mascarada) |
 | `POST /api/pagamentos` | Abre uma cobrança PIX ou cartão |
 | `GET /api/pagamentos/atual` | Última cobrança — usada no polling da tela de pagamento |
-| `POST /api/pagamentos/confirmar` | Confirma e promove a inscrição |
+| `POST /api/pagamentos/confirmar` | Confirma e promove a inscrição (só com a simulação ligada) |
 | `POST /api/pagamentos/desfecho` | Encerra como `expirado` ou `recusado` |
 | `GET`/`PUT` `/api/triagem` | Lê e grava as respostas da triagem |
 | `POST /api/webhooks/pix` | Confirmação servidor-a-servidor do provedor |
@@ -79,6 +79,12 @@ pnpm dev                     # http://localhost:3000
 ```
 
 Sem as variáveis do Supabase a interface sobe normalmente, mas as rotas de API respondem `503`.
+
+### Simulação de pagamento
+
+Enquanto o provedor não está integrado, `NEXT_PUBLIC_SIMULAR_PAGAMENTO=true` libera os botões de simulação na tela de pagamento e a rota `POST /api/pagamentos/confirmar`. É o que permite percorrer o funil inteiro num ambiente de teste.
+
+**Não ligue em produção.** Com a variável ativa, qualquer visitante confirma a própria inscrição sem pagar. Com ela ausente, a rota responde `403` e só o webhook — que exige o token do provedor — confirma pagamento.
 
 Outros comandos:
 

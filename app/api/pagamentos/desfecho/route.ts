@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { corpo, erro, rota } from '@/lib/http'
 import { lerInscricaoId } from '@/lib/session'
+import { SIMULACAO_ATIVA } from '@/lib/simulacao'
 import { supabaseServer } from '@/lib/supabase/server'
 
 type Desfecho = 'expirado' | 'recusado'
@@ -21,6 +22,11 @@ export function POST(request: Request) {
     const body = await corpo<Payload>(request)
     if (!body?.pagamentoId) return erro('Informe a cobrança.', 400)
     if (!body.desfecho || !PERMITIDOS.includes(body.desfecho)) return erro('Desfecho inválido.', 422)
+    // 'expirado' é legítimo: o contador do próprio aluno estourou. Já
+    // 'recusado' só chega de verdade pelo provedor, então aqui é simulação.
+    if (body.desfecho === 'recusado' && !SIMULACAO_ATIVA) {
+      return erro('Recusa manual desativada. O provedor informa a recusa.', 403)
+    }
 
     const { data, error } = await supabaseServer()
       .from('pagamentos')

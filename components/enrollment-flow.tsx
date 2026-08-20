@@ -6,6 +6,7 @@ import { Check, CreditCard, Loader2, QrCode, X } from 'lucide-react'
 import { ClinicalHeader, RedCross, VisualQr } from '@/components/clinical-header'
 import { CardForm } from '@/components/card-form'
 import { PriceBreakdown } from '@/components/price-breakdown'
+import { SIMULACAO_ATIVA } from '@/lib/simulacao'
 import {
   bandeiraDoCartao, DadosCartao, digits, EnrollmentData, fieldError, formatarBRL,
   loadJson, maskCpf, maskPhone, PagamentoMetodo, PRECO_CENTAVOS, saveJson, STORAGE_KEYS,
@@ -295,8 +296,8 @@ function PaymentStage({ metodo, cobranca, copied, restante, enviando, erroGeral,
       : cobranca && metodo === 'cartao' ? <CardForm enviando={enviando} onSubmit={pagarComCartao} />
       : null}
 
-    {cobranca && <div className="dev-tools">
-      <small>Controles de desenvolvimento</small>
+    {cobranca && SIMULACAO_ATIVA && <div className="dev-tools">
+      <small>Simulação · não use em produção</small>
       <button onClick={() => simular('pago')}>Simular pagamento confirmado</button>
       <button onClick={() => simular('expirado')}>Simular expirado</button>
       <button onClick={() => simular('recusado')}>Simular recusado</button>

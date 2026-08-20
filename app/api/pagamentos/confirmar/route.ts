@@ -1,20 +1,29 @@
 import { NextResponse } from 'next/server'
 import { corpo, erro, rota } from '@/lib/http'
 import { lerInscricaoId } from '@/lib/session'
+import { SIMULACAO_ATIVA } from '@/lib/simulacao'
 import { supabaseServer } from '@/lib/supabase/server'
 
 type Payload = { pagamentoId?: string }
 
 /**
- * Confirma uma cobrança e promove a inscrição.
+ * Confirma uma cobrança e promove a inscrição, a pedido do próprio
+ * navegador. É o atalho de simulação usado enquanto não há provedor.
  *
- * Hoje é chamada pelos controles de simulação da tela de pagamento. Quando
- * a Único entrar, quem chama isto é o webhook do provedor — a função
- * `confirmar_pagamento` no banco é idempotente justamente por isso: webhook
- * e clique podem chegar juntos sem gerar dois números de inscrição.
+ * Fica atrás de NEXT_PUBLIC_SIMULAR_PAGAMENTO porque confirmar o próprio
+ * pagamento sem pagar é exatamente o que um aluno mal-intencionado faria.
+ * Com a variável ausente, esta rota responde 403 e só o webhook — que exige
+ * o token do provedor — consegue confirmar.
+ *
+ * A função `confirmar_pagamento` no banco é idempotente, então webhook e
+ * clique podem chegar juntos sem gerar dois números de inscrição.
  */
 export function POST(request: Request) {
   return rota(async () => {
+    if (!SIMULACAO_ATIVA) {
+      return erro('Confirmação manual desativada. O pagamento é confirmado pelo provedor.', 403)
+    }
+
     const inscricaoId = await lerInscricaoId()
     if (!inscricaoId) return erro('Nenhuma inscrição nesta sessão.', 401)
 
