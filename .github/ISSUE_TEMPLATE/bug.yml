@@ -1,0 +1,46 @@
+name: Bug
+description: Algo no funil não está funcionando como deveria
+labels: [bug]
+body:
+  - type: dropdown
+    id: etapa
+    attributes:
+      label: Etapa do funil
+      options:
+        - Landing / captura de dados
+        - Pagamento PIX
+        - Confirmação de vaga
+        - Triagem (8 perguntas)
+        - Ficha do aluno / PWA
+        - Outro
+    validations:
+      required: true
+  - type: textarea
+    id: esperado
+    attributes:
+      label: O que deveria acontecer
+    validations:
+      required: true
+  - type: textarea
+    id: aconteceu
+    attributes:
+      label: O que aconteceu
+    validations:
+      required: true
+  - type: textarea
+    id: passos
+    attributes:
+      label: Passos para reproduzir
+      placeholder: |
+        1. Abrir /triagem/3
+        2. ...
+    validations:
+      required: true
+  - type: input
+    id: ambiente
+    attributes:
+      label: Dispositivo e navegador
+      placeholder: iPhone 14, Safari 17
+  - type: markdown
+    attributes:
+      value: "⚠️ Não cole CPF, telefone ou qualquer dado real de aluno nesta issue."
