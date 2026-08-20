@@ -23,15 +23,30 @@ Use **pnpm**, nunca npm ou yarn — o lockfile é do pnpm e o CI roda com `--fro
 - Sem biblioteca de CSS-in-JS: todo o visual está em `app/globals.css` com classes semânticas (`.triage-shell`, `.primary-button`, `.student-pass`). Reaproveite classe existente antes de criar uma nova.
 - Textos de interface em **português do Brasil**, tom clínico e direto.
 - Alias de import é `@/*` apontando para a raiz.
-- `lib/enrollment.ts` é a fonte única de máscaras, validação, chaves de `localStorage` e das 8 perguntas da triagem. Mudou lá, confira `/` e `/triagem/[step]`.
+- `lib/enrollment.ts` é a fonte única de máscaras, validação (CPF e cartão), preço, chaves de `localStorage` e das 8 perguntas da triagem. Mudou lá, confira `/` e `/triagem/[step]`.
+- Banco só pelo servidor: `lib/supabase/server.ts` usa a chave secreta e **nunca** pode ser importado de um Client Component. O navegador fala com `lib/api-cliente.ts`, que chama as rotas em `app/api/`.
 
 ## Armadilhas
 
 - `next.config.mjs` tem `typescript.ignoreBuildErrors: true` — `pnpm build` passa mesmo com erro de tipo. Rode `pnpm typecheck` sempre; hoje ele passa limpo.
 - A triagem tem exatamente 8 passos, validados em `app/triagem/[step]/page.tsx` e usados no cálculo da barra de progresso (`step * 12.5`). Mudar a quantidade de perguntas exige mexer nos dois lugares.
-- Todo estado vive em `localStorage`; não há back-end. Componentes que leem estado usam `useEffect` para evitar mismatch de hidratação — mantenha esse padrão.
-- Pagamento, código PIX, número de inscrição e QR são **simulados**. Trechos marcados com `[INTEGRAÇÃO]` sinalizam onde entra back-end de verdade.
+- O back-end é Postgres no Supabase. O `localStorage` sobrou como cache do rascunho — a fonte da verdade é o servidor. Componentes que leem estado usam `useEffect` para evitar mismatch de hidratação; mantenha esse padrão.
+- A sessão é o cookie httpOnly `cvb_inscricao`. Nenhuma rota aceita id de inscrição vindo do cliente — se aceitasse, qualquer um leria a inscrição alheia.
+- RLS está ligada e **forçada** nas três tabelas, sem policy nenhuma. Isso é proposital: nega tudo pela chave publicável. Não adicione policy sem entender que isso abriria acesso direto do navegador.
+- **Dado de cartão nunca chega ao servidor.** `POST /api/pagamentos` rejeita corpos com `numero`, `cvv`, `validade` ou `pan`. Se precisar mexer no cartão, a tokenização é no navegador.
+- Ao escrever função PL/pgSQL com `returns table`, não repita nome de coluna da tabela nos campos de retorno sem qualificar com alias — o Postgres aborta com "column reference is ambiguous". Já aconteceu em `confirmar_pagamento`.
+- Cobrança no provedor, tokenização e o payload PIX ainda são **simulados**. Trechos marcados com `[INTEGRAÇÃO]` sinalizam onde entra o provedor de verdade.
 
 ## Fluxo de trabalho
 
 Branch por tarefa, PR contra a `main`, template preenchido. Detalhes em `CONTRIBUTING.md`.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

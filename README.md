@@ -1,18 +1,52 @@
 # Curso de Punção Venosa — Cruz Vermelha Brasileira RJ
 
-Aplicação Next.js do funil de inscrição do **Curso de Punção Venosa (8h, presencial)** da Cruz Vermelha Brasileira — Rio de Janeiro: checkout via PIX, confirmação de vaga, triagem de 8 perguntas e ficha do aluno em PWA.
+Aplicação Next.js do funil de inscrição do **Curso de Punção Venosa (8h, presencial)** da Cruz Vermelha Brasileira — Rio de Janeiro: checkout via PIX ou cartão, confirmação de vaga, triagem de 8 perguntas e ficha do aluno em PWA. Os dados são persistidos em Postgres no Supabase.
 
 ## Fluxo do produto
 
 | Etapa | Rota | O que acontece |
 | --- | --- | --- |
 | 1. Captura | `/` | Landing + bottom sheet de dados (nome, WhatsApp, CPF, pré-requisito de ensino médio) |
-| 2. Pagamento | `/?etapa=pagamento` | PIX copia-e-cola com timer de 30 min e estados `pendente / pago / expirado / duplicado` |
+| 2. Pagamento | `/?etapa=pagamento` | Escolha entre PIX (copia-e-cola com timer de 30 min) e cartão (com parcelamento). Estados `pendente / confirmado / expirado / recusado` |
 | 3. Confirmação | `/?etapa=confirmado` | Vaga garantida — convite para a triagem |
 | 4. Triagem | `/triagem/1` … `/triagem/8` | CEP, perfil profissional, turno, dias, urgência, e-mail opcional, origem e confirmação final |
 | 5. Ficha do aluno | `/minha-inscricao` | Comprovante com QR, dados do curso e local — instalável como PWA e imprimível |
 
-O estado do funil é persistido em `localStorage` sob as chaves `cvb-enrollment` e `cvb-triage` (ver `lib/enrollment.ts`).
+A sessão do aluno é um cookie `httpOnly` (`cvb_inscricao`) com o id da inscrição — não há login. O `localStorage` (`cvb-enrollment`, `cvb-triage`) continua como cache do rascunho, mas **o servidor é a fonte da verdade**.
+
+## Arquitetura de dados
+
+Todo acesso ao banco passa por route handlers no servidor. As três tabelas têm RLS ligada e **forçada, sem nenhuma policy**, o que nega qualquer acesso pela chave publicável; o servidor usa a chave secreta, que ignora RLS.
+
+| Tabela | Guarda |
+| --- | --- |
+| `inscricoes` | Aluno, com CPF como chave natural única |
+| `triagem_respostas` | Uma linha por passo, resposta em `jsonb` |
+| `pagamentos` | Cobranças PIX e cartão, com histórico de tentativas |
+
+Três funções no banco mantêm atômico o que seria uma sequência de queries:
+
+- `upsert_inscricao` — cria ou atualiza pelo CPF, sem rebaixar quem já pagou
+- `confirmar_pagamento` — **idempotente**: webhook e clique podem chegar juntos sem gerar dois números de inscrição
+- `concluir_triagem_se_completa` — promove o status só quando os 8 passos existem
+
+### Rotas de API
+
+| Rota | Para que serve |
+| --- | --- |
+| `POST /api/inscricoes` | Cria/atualiza a inscrição e abre a sessão |
+| `GET /api/inscricoes/atual` | Estado da inscrição da sessão |
+| `GET /api/inscricoes/consulta` | Diz se um CPF já tem cadastro (resposta mascarada) |
+| `POST /api/pagamentos` | Abre uma cobrança PIX ou cartão |
+| `GET /api/pagamentos/atual` | Última cobrança — usada no polling da tela de pagamento |
+| `POST /api/pagamentos/confirmar` | Confirma e promove a inscrição |
+| `POST /api/pagamentos/desfecho` | Encerra como `expirado` ou `recusado` |
+| `GET`/`PUT` `/api/triagem` | Lê e grava as respostas da triagem |
+| `POST /api/webhooks/pix` | Confirmação servidor-a-servidor do provedor |
+
+### Dados de cartão e PCI
+
+O número do cartão, o CVV e a validade **nunca** trafegam pela nossa API nem são gravados. `POST /api/pagamentos` rejeita explicitamente qualquer corpo que contenha esses campos. O banco guarda apenas bandeira, últimos 4 dígitos e parcelas. A tokenização acontece no navegador, pelo SDK do provedor.
 
 ## Stack
 
@@ -25,9 +59,12 @@ O estado do funil é persistido em `localStorage` sob as chaves `cvb-enrollment`
 ## Rodando localmente
 
 ```bash
+cp .env.example .env.local   # e preencha SUPABASE_SECRET_KEY
 pnpm install
-pnpm dev          # http://localhost:3000
+pnpm dev                     # http://localhost:3000
 ```
+
+Sem as variáveis do Supabase a interface sobe normalmente, mas as rotas de API respondem `503`.
 
 Outros comandos:
 
@@ -44,19 +81,25 @@ app/                    Rotas do App Router (landing, triagem/[step], minha-insc
   globals.css           Design system completo (tokens, componentes, print styles)
 components/             Componentes de fluxo (enrollment, triage, student-pass, header)
   ui/                   Primitivas shadcn
-lib/enrollment.ts       Tipos, máscaras, validação de CPF, código PIX e perguntas da triagem
+  api/                  Route handlers — a única camada que fala com o banco
+components/card-form.tsx  Formulário de cartão (tokenização entra aqui)
+lib/enrollment.ts       Tipos, máscaras, validação de CPF e cartão, preço e perguntas da triagem
+lib/api-cliente.ts      Chamadas do navegador para as rotas
+lib/supabase/server.ts  Cliente Supabase com a chave secreta (nunca importar no cliente)
+lib/session.ts          Cookie httpOnly da sessão do funil
+supabase/migrations/    Schema versionado
 public/                 Ícones, manifest PWA e service worker
 ```
 
 ## Pontos de integração pendentes
 
-Estes trechos são simulações de front-end e precisam de back-end real antes de ir ao ar:
+Persistência, consulta por CPF, número de inscrição e triagem já são reais. O que falta é o dinheiro de verdade:
 
-- **Consulta de aluno existente** — `components/enrollment-flow.tsx` (marcado com `[INTEGRAÇÃO]`) hoje reconhece um CPF terminado em `725` e preenche dados fictícios.
-- **Confirmação de pagamento PIX** — o estado `pago` é simulado no cliente; precisa de webhook do PSP.
-- **Código PIX** — `PIX_CODE` em `lib/enrollment.ts` é estático; deve ser gerado por cobrança.
-- **Número de inscrição e QR** — `INSCRIÇÃO CVB-2026-0847` e o QR de `components/clinical-header.tsx` são visuais, não codificam dados reais.
-- **Persistência da triagem** — as respostas ficam apenas no `localStorage`, sem envio ao servidor.
+- **Cobrança no provedor** — `POST /api/pagamentos` registra a intenção, mas não chama a Único. É onde `provedor_id` passa a ser preenchido.
+- **Tokenização do cartão** — `components/card-form.tsx` valida e formata, mas ainda não tokeniza; hoje envia um token simulado.
+- **Código PIX** — `PIX_CODE` em `lib/enrollment.ts` é estático e **está com o payload EMV malformado** (ver issue aberta); deve ser gerado por cobrança, com os lengths e o CRC16 corretos.
+- **Webhook** — `POST /api/webhooks/pix` está implementado e protegido por `PIX_WEBHOOK_TOKEN`, mas troque a comparação de token pela verificação de assinatura que o provedor documentar.
+- **QR Code** — o QR de `components/clinical-header.tsx` é visual e não codifica dados reais.
 
 ## Contribuindo
 
