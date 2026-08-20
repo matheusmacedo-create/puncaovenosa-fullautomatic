@@ -80,6 +80,23 @@ pnpm dev                     # http://localhost:3000
 
 Sem as variáveis do Supabase a interface sobe normalmente, mas as rotas de API respondem `503`.
 
+### Variáveis aceitas
+
+| Para quê | Nomes aceitos |
+| --- | --- |
+| URL do projeto | `NEXT_PUBLIC_SUPABASE_URL` ou `SUPABASE_URL` |
+| Chave secreta | `SUPABASE_SECRET_KEY` ou `SUPABASE_SERVICE_ROLE_KEY` |
+
+As segundas opções são os nomes que a integração Supabase da Vercel injeta sozinha. Num deploy pela Vercel com essa integração ativa, não é preciso configurar nada à mão.
+
+## Publicando na Vercel
+
+1. Em vercel.com, **Add New → Project** e importar `puncaovenosa-fullautomatic`.
+2. A Vercel detecta Next.js e pnpm sozinha — não mexa em build command nem output directory.
+3. Em **Settings → Environment Variables**, conferir se a URL e a chave secreta do Supabase estão presentes (a integração costuma injetá-las). Se não estiverem, adicionar com qualquer um dos nomes da tabela acima.
+4. Para conseguir percorrer o funil sem provedor de pagamento, adicionar `NEXT_PUBLIC_SIMULAR_PAGAMENTO` com valor `true`. **Remova essa variável antes de receber aluno de verdade.**
+5. Deploy. Cada push na `main` gera um novo deploy, e cada pull request ganha uma URL de preview própria.
+
 ### Simulação de pagamento
 
 Enquanto o provedor não está integrado, `NEXT_PUBLIC_SIMULAR_PAGAMENTO=true` libera os botões de simulação na tela de pagamento e a rota `POST /api/pagamentos/confirmar`. É o que permite percorrer o funil inteiro num ambiente de teste.
