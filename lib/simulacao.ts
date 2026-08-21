@@ -1,29 +1,54 @@
 /**
- * Interruptor da simulação de pagamento.
+ * Estado da simulação de pagamento.
  *
- * Enquanto a Único não está integrada, o funil precisa tratar a cobrança
- * como aprovada — senão não dá para percorrer as etapas seguintes. Esse
- * atalho é, na prática, um botão de "inscrição grátis": com ele ligado,
- * qualquer visitante conclui a inscrição sem pagar. Por isso é opt-in.
+ * Enquanto não há provedor integrado, o funil trata a cobrança como
+ * aprovada — senão o aluno fica preso na tela de pagamento e as etapas
+ * seguintes não podem ser exercitadas.
  *
- * A leitura é feita NO SERVIDOR, a cada requisição, e o estado viaja para o
- * navegador dentro da resposta da cobrança. Isso é deliberado: uma variável
- * `NEXT_PUBLIC_*` é embutida no bundle em tempo de build, então mudá-la no
- * painel só teria efeito depois de um novo deploy.
+ * A regra é derivada do próprio ambiente, e não de uma chave que alguém
+ * precisa lembrar de ligar:
  *
- * Como variável de servidor, ela também deixa de ser embutida no JavaScript
- * que o visitante baixa.
+ *   sem provedor configurado  -> simula (é o único modo que funciona)
+ *   com provedor configurado  -> não simula (o dinheiro é real)
+ *
+ * Exigir uma variável para ligar a simulação parecia mais seguro, mas não
+ * era: sem provedor, ninguém consegue pagar de qualquer jeito, então a
+ * variável desligada apenas travava o funil sem proteger nada. A proteção
+ * de verdade aparece sozinha no dia em que a chave do provedor existir.
+ *
+ * `SIMULAR_PAGAMENTO` continua tendo a palavra final, para forçar qualquer
+ * um dos dois lados — inclusive desligar a simulação num ambiente que ainda
+ * não tem provedor.
  *
  * NÃO condicione isto a `NODE_ENV !== 'production'`. Na Vercel, todo deploy
- * roda com NODE_ENV=production — inclusive os de preview —, então essa
- * condição desliga a simulação em qualquer ambiente publicado, e a variável
- * passa a não ter efeito nenhum sem dizer por quê. A proteção aqui é a
- * variável ser opt-in, somada ao aviso visível na tela de pagamento e ao
- * que /api/diagnostico reporta.
+ * roda com NODE_ENV=production, preview inclusive — essa condição desliga a
+ * simulação em qualquer ambiente publicado, sem dizer por quê.
  */
-export function simulacaoAtiva(): boolean {
-  // SIMULAR_PAGAMENTO é o nome preferido. O NEXT_PUBLIC_ é aceito para não
-  // quebrar quem já configurou com ele, mas exige rebuild para valer.
-  const valor = process.env.SIMULAR_PAGAMENTO ?? process.env.NEXT_PUBLIC_SIMULAR_PAGAMENTO
-  return valor?.trim().toLowerCase() === 'true'
+
+/** Credenciais que indicam um provedor de pagamento de verdade. */
+function provedorConfigurado(): boolean {
+  return !!(
+    process.env.UNICO_API_KEY?.trim() ||
+    process.env.UNICO_SECRET_KEY?.trim() ||
+    process.env.PAGAMENTO_PROVEDOR_CHAVE?.trim()
+  )
 }
+
+export type MotivoDaSimulacao =
+  | 'forçada pela variável SIMULAR_PAGAMENTO'
+  | 'desligada pela variável SIMULAR_PAGAMENTO'
+  | 'nenhum provedor de pagamento configurado'
+  | 'provedor de pagamento configurado'
+
+export function estadoDaSimulacao(): { ativa: boolean; motivo: MotivoDaSimulacao } {
+  const explicito = (process.env.SIMULAR_PAGAMENTO ?? process.env.NEXT_PUBLIC_SIMULAR_PAGAMENTO)?.trim()
+  if (explicito) {
+    const ativa = explicito.toLowerCase() === 'true'
+    return { ativa, motivo: ativa ? 'forçada pela variável SIMULAR_PAGAMENTO' : 'desligada pela variável SIMULAR_PAGAMENTO' }
+  }
+  return provedorConfigurado()
+    ? { ativa: false, motivo: 'provedor de pagamento configurado' }
+    : { ativa: true, motivo: 'nenhum provedor de pagamento configurado' }
+}
+
+export const simulacaoAtiva = (): boolean => estadoDaSimulacao().ativa
