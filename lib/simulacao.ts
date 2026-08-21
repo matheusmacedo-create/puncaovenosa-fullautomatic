@@ -12,4 +12,4 @@
  */
 export const SIMULACAO_ATIVA =
   process.env.NODE_ENV !== 'production' &&
-  process.env.NEXT_PUBLIC_SIMULAR_PAGAMENTO === 'true'
+  process.env.SIMULAR_PAGAMENTO === 'true'

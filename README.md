@@ -120,7 +120,7 @@ Nenhum segredo é devolvido: da chave, só o prefixo. A rota fica atrás da mesm
 
 ### Simulação de pagamento
 
-Enquanto o provedor não está integrado, `NEXT_PUBLIC_SIMULAR_PAGAMENTO=true` libera os botões de simulação na tela de pagamento e a rota `POST /api/pagamentos/confirmar`. É o que permite percorrer o funil inteiro num ambiente de teste.
+Enquanto o provedor não está integrado, `SIMULAR_PAGAMENTO=true` libera os botões de simulação na tela de pagamento e a rota `POST /api/pagamentos/confirmar`. É o que permite percorrer o funil inteiro num ambiente de teste.
 
 **Não ligue em produção.** Com a variável ativa, qualquer visitante confirma a própria inscrição sem pagar. Com ela ausente, a rota responde `403` e só o webhook — que exige o token do provedor — confirma pagamento.
 
