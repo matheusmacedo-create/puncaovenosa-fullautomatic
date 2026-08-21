@@ -57,7 +57,7 @@ Três funções no banco mantêm atômico o que seria uma sequência de queries:
 | `POST /api/pagamentos/desfecho` | Encerra como `expirado` ou `recusado` |
 | `GET`/`PUT` `/api/triagem` | Lê e grava as respostas da triagem |
 | `POST /api/webhooks/pix` | Confirmação servidor-a-servidor do provedor |
-| `GET /api/diagnostico` | Estado da configuração (só com a simulação ligada) |
+| `GET /api/diagnostico` | Estado da configuração e da simulação |
 
 ### Dados de cartão e PCI
 
@@ -108,7 +108,7 @@ As segundas opções são os nomes que a integração Supabase da Vercel injeta 
   "banco": { "leTabelas": true, "temFuncoes": true } }
 ```
 
-Ele informa se a simulação está ativa e nomeia os enganos mais comuns: URL inválida, o nome da variável colado no lugar do valor, e a chave **publicável** usada onde deveria estar a secreta. Esse último é traiçoeiro — a chave publicável não gera erro, o RLS apenas devolve lista vazia, então tudo parece funcionar e nada é gravado.
+Fica **sem proteção** de propósito: a primeira versão exigia a simulação ligada e, com isso, respondia `403` justamente quando alguém precisava descobrir por que a simulação estava desligada. Ele informa se a simulação está ativa, o motivo, e nomeia os enganos mais comuns: URL inválida, o nome da variável colado no lugar do valor, e a chave **publicável** usada onde deveria estar a secreta. Esse último é traiçoeiro — a chave publicável não gera erro, o RLS apenas devolve lista vazia, então tudo parece funcionar e nada é gravado.
 
 Nenhum segredo é devolvido: da chave, só o prefixo. A rota fica atrás da mesma variável da simulação, e responde `403` sem ela.
 
@@ -120,11 +120,18 @@ Nenhum segredo é devolvido: da chave, só o prefixo. A rota fica atrás da mesm
 
 ### Simulação de pagamento
 
-Enquanto o provedor não está integrado, `SIMULAR_PAGAMENTO=true` trata a cobrança como aprovada: copiar o código PIX ou pagar no cartão leva direto para a etapa seguinte. É o que permite percorrer o funil inteiro num ambiente de teste, e a tela exibe um aviso de modo de teste enquanto está ativa.
+O app decide sozinho, a partir do ambiente:
 
-É uma variável de **servidor**, lida a cada requisição e enviada ao navegador dentro da resposta da cobrança. Ligar ou desligar tem efeito imediato, **sem novo deploy** — ao contrário de uma `NEXT_PUBLIC_*`, que é embutida no bundle em tempo de build. O nome antigo `NEXT_PUBLIC_SIMULAR_PAGAMENTO` continua aceito, mas exige rebuild para valer.
+| Situação | Comportamento |
+| --- | --- |
+| Nenhuma chave de provedor configurada | **Simula** — copiar o PIX ou pagar no cartão aprova e avança |
+| `UNICO_API_KEY` presente | **Não simula** — o dinheiro é real |
 
-**Não ligue em produção.** Com a variável ativa, qualquer visitante conclui a inscrição sem pagar. Com ela ausente, `POST /api/pagamentos/confirmar` responde `403` e só o webhook — que exige o token do provedor — confirma pagamento.
+Exigir uma variável para ligar a simulação parecia mais seguro, mas não era: sem provedor ninguém consegue pagar de qualquer forma, então a variável desligada apenas travava o funil sem proteger nada. A proteção aparece sozinha quando a chave do provedor existir.
+
+`SIMULAR_PAGAMENTO` tem a palavra final e sobrescreve os dois lados — `true` força a simulação, `false` a desliga. Na Vercel, lembre-se de que **cada ambiente tem suas próprias variáveis**: um valor definido só em Production não vale nos previews, e vice-versa. Alterar a variável exige **refazer o deploy** para valer.
+
+Enquanto a simulação está ativa, a tela de pagamento exibe um aviso de modo de teste.
 
 Outros comandos:
 
