@@ -10,4 +10,6 @@
  * produção, deixe a variável ausente: aí só o webhook do provedor confirma
  * pagamento.
  */
-export const SIMULACAO_ATIVA = process.env.NEXT_PUBLIC_SIMULAR_PAGAMENTO === 'true'
+export const SIMULACAO_ATIVA =
+  process.env.NODE_ENV !== 'production' &&
+  process.env.NEXT_PUBLIC_SIMULAR_PAGAMENTO === 'true'
