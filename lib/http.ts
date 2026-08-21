@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { SupabaseNaoConfigurado } from '@/lib/supabase/server'
+import { SupabaseNaoConfigurado, SupabaseUrlInvalida } from '@/lib/supabase/server'
 
 /** Resposta de erro no formato que o front espera: { erro: string }. */
 export const erro = (mensagem: string, status: number) => NextResponse.json({ erro: mensagem }, { status })
@@ -10,8 +10,8 @@ export const erro = (mensagem: string, status: number) => NextResponse.json({ er
  */
 export function rota<T>(handler: () => Promise<NextResponse<T> | NextResponse<{ erro: string }>>) {
   return handler().catch((e: unknown) => {
-    if (e instanceof SupabaseNaoConfigurado) {
-      console.error('[funil] Supabase não configurado:', e.message)
+    if (e instanceof SupabaseNaoConfigurado || e instanceof SupabaseUrlInvalida) {
+      console.error('[funil] configuração do Supabase:', e.message)
       return erro('Serviço de inscrição indisponível no momento.', 503)
     }
     console.error('[funil] erro inesperado:', e)

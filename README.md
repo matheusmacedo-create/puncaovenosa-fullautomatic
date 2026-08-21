@@ -57,6 +57,7 @@ Três funções no banco mantêm atômico o que seria uma sequência de queries:
 | `POST /api/pagamentos/desfecho` | Encerra como `expirado` ou `recusado` |
 | `GET`/`PUT` `/api/triagem` | Lê e grava as respostas da triagem |
 | `POST /api/webhooks/pix` | Confirmação servidor-a-servidor do provedor |
+| `GET /api/diagnostico` | Estado da configuração (só com a simulação ligada) |
 
 ### Dados de cartão e PCI
 
@@ -96,6 +97,26 @@ As segundas opções são os nomes que a integração Supabase da Vercel injeta 
 3. Em **Settings → Environment Variables**, conferir se a URL e a chave secreta do Supabase estão presentes (a integração costuma injetá-las). Se não estiverem, adicionar com qualquer um dos nomes da tabela acima.
 4. Para conseguir percorrer o funil sem provedor de pagamento, adicionar `NEXT_PUBLIC_SIMULAR_PAGAMENTO` com valor `true`. **Remova essa variável antes de receber aluno de verdade.**
 5. Deploy. Cada push na `main` gera um novo deploy, e cada pull request ganha uma URL de preview própria.
+
+### Diagnóstico
+
+`GET /api/diagnostico` responde o estado da configuração num ambiente onde não dá para abrir o terminal — o preview do v0, um deploy na Vercel:
+
+```json
+{ "ok": true, "etapa": "tudo certo",
+  "config": { "url": {...}, "chave": { "tipo": "secreta (correta)", "serve": true } },
+  "banco": { "leTabelas": true, "temFuncoes": true } }
+```
+
+Ele nomeia os enganos mais comuns: URL inválida, o nome da variável colado no lugar do valor, e a chave **publicável** usada onde deveria estar a secreta. Esse último é traiçoeiro — a chave publicável não gera erro, o RLS apenas devolve lista vazia, então tudo parece funcionar e nada é gravado.
+
+Nenhum segredo é devolvido: da chave, só o prefixo. A rota fica atrás da mesma variável da simulação, e responde `403` sem ela.
+
+| Resposta | O que fazer |
+| --- | --- |
+| `etapa: "configuração"` | Corrigir a variável que o campo aponta |
+| `etapa: "banco"` | Chave certa, mas o schema não respondeu — conferir se as migrations rodaram |
+| `etapa: "tudo certo"` | Configuração ok; o problema é outro |
 
 ### Simulação de pagamento
 

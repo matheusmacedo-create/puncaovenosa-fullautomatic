@@ -35,8 +35,28 @@ export function supabaseServer(): SupabaseClient {
   const url = definida(process.env.NEXT_PUBLIC_SUPABASE_URL) ?? definida(process.env.SUPABASE_URL)
   const key = definida(process.env.SUPABASE_SECRET_KEY) ?? definida(process.env.SUPABASE_SERVICE_ROLE_KEY)
   if (!url || !key) throw new SupabaseNaoConfigurado(!url, !key)
+  // Sem esta checagem, um valor errado (o nome da variável colado no lugar do
+  // valor, por exemplo) faz o createClient estourar e a rota devolver um 500
+  // genérico, que não diz nada a quem está configurando.
+  if (!urlPlausivel(url)) throw new SupabaseUrlInvalida(url)
   cached = createClient(url, key, { auth: { persistSession: false } })
   return cached
+}
+
+function urlPlausivel(valor: string) {
+  try {
+    const { protocol } = new URL(valor)
+    return protocol === 'https:' || protocol === 'http:'
+  } catch { return false }
+}
+
+export class SupabaseUrlInvalida extends Error {
+  constructor(valor: string) {
+    // A URL não é segredo, então mostrá-la no log é o que resolve o problema
+    // mais rápido — quase sempre é um valor colado errado.
+    super(`URL do Supabase inválida: ${JSON.stringify(valor)}. Esperado algo como https://<projeto>.supabase.co (${NOMES_DE_URL}).`)
+    this.name = 'SupabaseUrlInvalida'
+  }
 }
 
 export class SupabaseNaoConfigurado extends Error {
