@@ -7,7 +7,7 @@ import { ClinicalHeader, RedCross, VisualQr } from '@/components/clinical-header
 import { CardForm } from '@/components/card-form'
 import { PriceBreakdown } from '@/components/price-breakdown'
 import {
-  bandeiraDoCartao, DadosCartao, digits, EnrollmentData, fieldError, formatarBRL,
+  bandeiraDoCartao, CARTAO_VAZIO, DadosCartao, digits, EnrollmentData, fieldError, formatarBRL,
   loadJson, maskCpf, maskPhone, PagamentoMetodo, PRECO_CENTAVOS, saveJson, STORAGE_KEYS,
 } from '@/lib/enrollment'
 import {
@@ -34,6 +34,9 @@ export function EnrollmentFlow() {
   const [metodo, setMetodo] = useState<PagamentoMetodo>('pix')
   const [cobranca, setCobranca] = useState<Cobranca | null>(null)
   const [copied, setCopied] = useState(false)
+  // Fica aqui, e não dentro do CardForm, para sobreviver a um clique fora da
+  // folha. Só em memória: dado de cartão nunca é gravado.
+  const [cartao, setCartao] = useState<DadosCartao>(CARTAO_VAZIO)
   const [agora, setAgora] = useState(0)
   const pointerStart = useRef<number | null>(null)
 
@@ -222,6 +225,7 @@ export function EnrollmentFlow() {
           {stage === 'dados' && <DataStage data={data} errors={errors} cadastro={cadastro} enviando={enviando} erroGeral={erroGeral} update={update} blur={blur} submit={submitData} />}
           {stage === 'pagamento' && <PaymentStage
             metodo={metodo} cobranca={cobranca} copied={copied} restante={restante} enviando={enviando} erroGeral={erroGeral}
+            cartao={cartao} setCartao={setCartao}
             trocarMetodo={trocarMetodo} copyPix={copyPix} gerarNovoCodigo={gerarNovoCodigo} pagarComCartao={pagarComCartao} simular={simular} />}
           {stage === 'confirmado' && <ConfirmationStage />}
         </section>
@@ -246,9 +250,9 @@ function DataStage({ data, errors, cadastro, enviando, erroGeral, update, blur, 
       <p className="subtitle">Curso de Punção Venosa · 8h presenciais · Sede CVB-RJ</p>
       {cadastro && <p className="notice">Já temos seu cadastro, {cadastro.primeiroNome}. {cadastro.jaPaga ? 'Sua inscrição está paga — vamos direto para a triagem.' : `Confirme seus dados para continuar. WhatsApp terminado em ${cadastro.telefoneFinal}.`}</p>}
       <div className="field-group">
-        <Field label="Nome completo" error={errors.name}><input type="text" autoComplete="name" value={data.name} onChange={e => update('name', e.target.value)} onBlur={() => blur('name')} onFocus={focus} aria-invalid={!!errors.name} /></Field>
-        <Field label="WhatsApp" error={errors.phone}><input type="tel" inputMode="numeric" autoComplete="tel" placeholder="(00) 00000-0000" value={data.phone} onChange={e => update('phone', maskPhone(e.target.value))} onBlur={() => blur('phone')} onFocus={focus} aria-invalid={!!errors.phone} /></Field>
-        <Field label="CPF" error={errors.cpf}><input type="text" inputMode="numeric" autoComplete="off" placeholder="000.000.000-00" value={data.cpf} onChange={e => update('cpf', maskCpf(e.target.value))} onBlur={() => blur('cpf')} onFocus={focus} aria-invalid={!!errors.cpf} /></Field>
+        <Field id="dados-nome" label="Nome completo" error={errors.name}><input id="dados-nome" type="text" autoComplete="name" value={data.name} onChange={e => update('name', e.target.value)} onBlur={() => blur('name')} onFocus={focus} aria-invalid={!!errors.name} /></Field>
+        <Field id="dados-telefone" label="WhatsApp" error={errors.phone}><input id="dados-telefone" type="tel" inputMode="numeric" autoComplete="tel" placeholder="(00) 00000-0000" value={data.phone} onChange={e => update('phone', maskPhone(e.target.value))} onBlur={() => blur('phone')} onFocus={focus} aria-invalid={!!errors.phone} /></Field>
+        <Field id="dados-cpf" label="CPF" error={errors.cpf}><input id="dados-cpf" type="text" inputMode="numeric" autoComplete="off" placeholder="000.000.000-00" value={data.cpf} onChange={e => update('cpf', maskCpf(e.target.value))} onBlur={() => blur('cpf')} onFocus={focus} aria-invalid={!!errors.cpf} /></Field>
         <div className="field">
           <label className="checkbox-row"><input type="checkbox" checked={data.highSchool} onChange={e => update('highSchool', e.target.checked)} onBlur={() => blur('highSchool')} /><span>Concluí o Ensino Médio</span></label>
           <p className="help">Pré-requisito do curso. A conferência é feita na secretaria no dia da aula.</p>
@@ -265,13 +269,18 @@ function DataStage({ data, errors, cadastro, enviando, erroGeral, update, blur, 
   </>
 }
 
-function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
-  return <div className="field"><label>{label}</label>{children}{error && <p className="error" role="alert">{error}</p>}</div>
+/**
+ * `htmlFor` + `id` ligam o rótulo ao campo. Sem isso o leitor de tela anuncia
+ * "campo de edição" sem dizer qual, e tocar no rótulo não foca o campo.
+ */
+function Field({ id, label, error, children }: { id: string; label: string; error?: string; children: React.ReactNode }) {
+  return <div className="field"><label htmlFor={id}>{label}</label>{children}{error && <p className="error" role="alert">{error}</p>}</div>
 }
 
-function PaymentStage({ metodo, cobranca, copied, restante, enviando, erroGeral, trocarMetodo, copyPix, gerarNovoCodigo, pagarComCartao, simular }: {
+function PaymentStage({ metodo, cobranca, copied, restante, enviando, erroGeral, cartao, setCartao, trocarMetodo, copyPix, gerarNovoCodigo, pagarComCartao, simular }: {
   metodo: PagamentoMetodo; cobranca: Cobranca | null; copied: boolean; restante: number | null
   enviando: boolean; erroGeral: string
+  cartao: DadosCartao; setCartao: (atualizar: (anterior: DadosCartao) => DadosCartao) => void
   trocarMetodo: (m: PagamentoMetodo) => void; copyPix: () => void; gerarNovoCodigo: () => void
   pagarComCartao: (c: DadosCartao) => void; simular: (d: 'pago' | 'expirado' | 'recusado') => void
 }) {
@@ -304,7 +313,7 @@ function PaymentStage({ metodo, cobranca, copied, restante, enviando, erroGeral,
         <p className={`timer ${restante !== null && restante <= 300 ? 'warning' : ''}`}>Este código expira em {timer}</p>
         <div className="payment-status"><span className="pulse" /><span>Aguardando confirmação do pagamento…</span></div>
       </>
-      : cobranca && metodo === 'cartao' ? <CardForm enviando={enviando} onSubmit={pagarComCartao} />
+      : cobranca && metodo === 'cartao' ? <CardForm enviando={enviando} cartao={cartao} setCartao={setCartao} onSubmit={pagarComCartao} />
       : null}
 
     {cobranca?.simulacao && <div className="dev-tools">

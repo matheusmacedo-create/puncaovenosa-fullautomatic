@@ -18,9 +18,18 @@ const NOMES_DE_BANDEIRA: Record<string, string> = {
  * Quando a Único entrar, é neste componente que o SDK dela tokeniza o
  * cartão no próprio navegador; `onSubmit` passa a receber o token, e o
  * número completo nunca sai do dispositivo do aluno.
+ *
+ * O estado do cartão vive no componente PAI, e não aqui: fechar a folha sem
+ * querer desmonta este formulário, e um estado local seria perdido junto com
+ * tudo o que o aluno digitou. Continua só em memória — nunca em
+ * localStorage, que é exatamente o que a PCI-DSS proíbe.
  */
-export function CardForm({ enviando, onSubmit }: { enviando: boolean; onSubmit: (dados: DadosCartao) => void }) {
-  const [cartao, setCartao] = useState<DadosCartao>(CARTAO_VAZIO)
+export function CardForm({ enviando, cartao, setCartao, onSubmit }: {
+  enviando: boolean
+  cartao: DadosCartao
+  setCartao: (atualizar: (anterior: DadosCartao) => DadosCartao) => void
+  onSubmit: (dados: DadosCartao) => void
+}) {
   const [erros, setErros] = useState<Partial<Record<keyof DadosCartao, string>>>({})
   const bandeira = bandeiraDoCartao(cartao.numero)
   const parcelas = parcelasDisponiveis()
