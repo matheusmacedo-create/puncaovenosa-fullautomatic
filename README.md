@@ -1,0 +1,230 @@
+# Curso de Punção Venosa — Cruz Vermelha Brasileira RJ
+
+Aplicação Next.js do funil de inscrição do **Curso de Punção Venosa (8h, presencial)** da Cruz Vermelha Brasileira — Rio de Janeiro: checkout via PIX ou cartão, confirmação de vaga, triagem de 8 perguntas e ficha do aluno em PWA. Os dados são persistidos em Postgres no Supabase.
+
+## Fluxo do produto
+
+| Etapa | Rota | O que acontece |
+| --- | --- | --- |
+| 1. Captura | `/` | Landing + bottom sheet de dados (nome, WhatsApp, CPF, pré-requisito de ensino médio) e composição do preço |
+| 2. Pagamento | `/?etapa=pagamento` | Escolha entre PIX (copia-e-cola com timer de 30 min) e cartão (com parcelamento). Estados `pendente / confirmado / expirado / recusado` |
+| 3. Confirmação | `/?etapa=confirmado` | Vaga garantida — convite para a triagem |
+| 4. Triagem | `/triagem/1` … `/triagem/8` | CEP, perfil profissional, turno, dias, urgência, e-mail opcional, origem e confirmação final |
+| 5. Ficha do aluno | `/minha-inscricao` | Comprovante com QR, dados do curso e local — instalável como PWA e imprimível |
+
+A sessão do aluno é um cookie `httpOnly` (`cvb_inscricao`) com o id da inscrição — não há login. O `localStorage` (`cvb-enrollment`, `cvb-triage`) continua como cache do rascunho, mas **o servidor é a fonte da verdade**.
+
+## Preço
+
+| Item | Valor |
+| --- | --- |
+| Matrícula | R$ 99,00 |
+| Curso presencial, 8h | R$ 150,00 |
+| **Total à vista** | **R$ 249,00** |
+
+O aluno paga o total de uma vez, em PIX ou cartão. A composição é definida em `COMPOSICAO_PRECO` (`lib/enrollment.ts`) e o total é **derivado da soma** — nunca escreva o valor solto.
+
+Cada cobrança grava sua própria composição na coluna `pagamentos.itens`, e uma constraint no banco exige que os itens fechem com `valor_centavos`. Isso impede que uma cobrança de R$ 249 seja registrada com itens somando R$ 99.
+
+Cobrar apenas a matrícula é aceito pelo modelo, mas **não está implementado no funil** — fica disponível para um downsell futuro.
+
+## Arquitetura de dados
+
+Todo acesso ao banco passa por route handlers no servidor. As três tabelas têm RLS ligada e **forçada, sem nenhuma policy**, o que nega qualquer acesso pela chave publicável; o servidor usa a chave secreta, que ignora RLS.
+
+| Tabela | Guarda |
+| --- | --- |
+| `inscricoes` | Aluno, com CPF como chave natural única |
+| `triagem_respostas` | Uma linha por passo, resposta em `jsonb` |
+| `pagamentos` | Cobranças PIX e cartão, com histórico de tentativas |
+
+Três funções no banco mantêm atômico o que seria uma sequência de queries:
+
+- `upsert_inscricao` — cria ou atualiza pelo CPF, sem rebaixar quem já pagou
+- `confirmar_pagamento` — **idempotente**: webhook e clique podem chegar juntos sem gerar dois números de inscrição
+- `concluir_triagem_se_completa` — promove o status só quando os 8 passos existem
+
+### Rotas de API
+
+| Rota | Para que serve |
+| --- | --- |
+| `POST /api/inscricoes` | Cria/atualiza a inscrição e abre a sessão |
+| `GET /api/inscricoes/atual` | Estado da inscrição da sessão |
+| `GET /api/inscricoes/consulta` | Diz se um CPF já tem cadastro (resposta mascarada) |
+| `POST /api/pagamentos` | Abre uma cobrança PIX ou cartão |
+| `GET /api/pagamentos/atual` | Última cobrança — usada no polling da tela de pagamento |
+| `POST /api/pagamentos/confirmar` | Confirma e promove a inscrição (só com a simulação ligada) |
+| `POST /api/pagamentos/desfecho` | Encerra como `expirado` ou `recusado` |
+| `GET`/`PUT` `/api/triagem` | Lê e grava as respostas da triagem |
+| `POST /api/webhooks/unicopag` | Postback da Únicopag — confirma consultando a API, não confia no corpo |
+| `GET /api/diagnostico` | Estado da configuração e da simulação |
+
+### Credencial do aluno
+
+Cada inscrição carrega um `token_validacao` — 128 bits aleatórios em hexadecimal, gerado pelo banco. O QR Code da ficha aponta para `/validar/<token>`, e é essa página que qualquer pessoa da instituição abre ao escanear, sem login.
+
+Hexadecimal, e não base64: base64 termina em `=` e pode conter `+`, que numa URL são ambíguos — o token que chega ao servidor deixa de ser o do banco e a credencial válida é recusada. Aconteceu no primeiro desenho.
+
+A página mostra só o necessário para conferir a pessoa com um documento: nome, número de inscrição, miolo do CPF e situação. Cada leitura é registrada em `validacoes`, com o horário — que aparece na tela justamente para denunciar uma captura de tela antiga sendo exibida no lugar de uma conferência real.
+
+O QR **não** usa serviço externo: é gerado no próprio navegador pela biblioteca `qrcode`. Dado de aluno não precisa passar por terceiros para virar imagem.
+
+### Dados de cartão e PCI
+
+O número do cartão, o CVV e a validade **nunca** trafegam pela nossa API nem são gravados. `POST /api/pagamentos` rejeita explicitamente qualquer corpo que contenha esses campos. O banco guarda apenas bandeira, últimos 4 dígitos e parcelas. A tokenização acontece no navegador, pelo SDK do provedor.
+
+## Stack
+
+- **Next.js 16** (App Router, Turbopack) + **React 19**
+- **TypeScript 5.7** em modo `strict`
+- **Tailwind CSS 4** via `@tailwindcss/postcss`, com design system em `app/globals.css`
+- **lucide-react** para ícones, **Vercel Analytics** em produção
+- **pnpm** como gerenciador de pacotes
+
+## Rodando localmente
+
+```bash
+cp .env.example .env.local   # e preencha SUPABASE_SECRET_KEY
+pnpm install
+pnpm dev                     # http://localhost:3000
+```
+
+Sem as variáveis do Supabase a interface sobe normalmente, mas as rotas de API respondem `503`.
+
+### Variáveis aceitas
+
+| Para quê | Nomes aceitos |
+| --- | --- |
+| URL do projeto | `NEXT_PUBLIC_SUPABASE_URL` ou `SUPABASE_URL` |
+| Chave secreta | `SUPABASE_SECRET_KEY` ou `SUPABASE_SERVICE_ROLE_KEY` |
+
+As segundas opções são os nomes que a integração Supabase da Vercel injeta sozinha. Num deploy pela Vercel com essa integração ativa, não é preciso configurar nada à mão.
+
+## Antes de vender
+
+`GET /api/diagnostico` responde `prontoParaVender` e lista o que falta. As pendências possíveis:
+
+| Pendência | Efeito |
+| --- | --- |
+| `UNICO_API_KEY` ausente | Nenhuma cobrança é real |
+| Chave recusada pela API | Cobrança falha no ato |
+| Simulação ativa | As cobranças não são reais |
+| `PERMITIR_CONFIRMACAO_MANUAL` ligada | Qualquer visitante conclui a inscrição sem pagar |
+| `NEXT_PUBLIC_SITE_URL` ausente | A Únicopag não consegue avisar o pagamento |
+
+As rotas de pagamento declaram `maxDuration = 60`. A criação de cobrança no cartão leva cerca de 11 segundos na Únicopag, e o limite padrão de uma função na Vercel é 10 — sem isso, o aluno receberia erro numa cobrança possivelmente criada.
+
+## Publicando na Vercel
+
+1. Em vercel.com, **Add New → Project** e importar `puncaovenosa-fullautomatic`.
+2. A Vercel detecta Next.js e pnpm sozinha — não mexa em build command nem output directory.
+3. Em **Settings → Environment Variables**, conferir se a URL e a chave secreta do Supabase estão presentes (a integração costuma injetá-las). Se não estiverem, adicionar com qualquer um dos nomes da tabela acima.
+4. Para conseguir percorrer o funil sem provedor de pagamento, adicionar `SIMULAR_PAGAMENTO` com valor `true`. **Remova essa variável antes de receber aluno de verdade.**
+5. Deploy. Cada push na `main` gera um novo deploy, e cada pull request ganha uma URL de preview própria.
+
+### Diagnóstico
+
+`GET /api/diagnostico` responde o estado da configuração num ambiente onde não dá para abrir o terminal — o preview do v0, um deploy na Vercel:
+
+```json
+{ "ok": true, "etapa": "tudo certo",
+  "config": { "url": {...}, "chave": { "tipo": "secreta (correta)", "serve": true } },
+  "banco": { "leTabelas": true, "temFuncoes": true } }
+```
+
+Fica **sem proteção** de propósito: a primeira versão exigia a simulação ligada e, com isso, respondia `403` justamente quando alguém precisava descobrir por que a simulação estava desligada. Ele informa se a simulação está ativa, o motivo, e nomeia os enganos mais comuns: URL inválida, o nome da variável colado no lugar do valor, e a chave **publicável** usada onde deveria estar a secreta. Esse último é traiçoeiro — a chave publicável não gera erro, o RLS apenas devolve lista vazia, então tudo parece funcionar e nada é gravado.
+
+Nenhum segredo é devolvido: da chave, só o prefixo. A rota fica atrás da mesma variável da simulação, e responde `403` sem ela.
+
+| Resposta | O que fazer |
+| --- | --- |
+| `etapa: "configuração"` | Corrigir a variável que o campo aponta |
+| `etapa: "banco"` | Chave certa, mas o schema não respondeu — conferir se as migrations rodaram |
+| `etapa: "tudo certo"` | Configuração ok; o problema é outro |
+
+### Simulação de pagamento
+
+O app decide sozinho, a partir do ambiente:
+
+| Situação | Comportamento |
+| --- | --- |
+| Nenhuma chave de provedor configurada | **Simula** — copiar o PIX ou pagar no cartão aprova e avança |
+| `UNICO_API_KEY` presente | **Não simula** — o dinheiro é real |
+
+Exigir uma variável para ligar a simulação parecia mais seguro, mas não era: sem provedor ninguém consegue pagar de qualquer forma, então a variável desligada apenas travava o funil sem proteger nada. A proteção aparece sozinha quando a chave do provedor existir.
+
+`SIMULAR_PAGAMENTO` tem a palavra final e sobrescreve os dois lados — `true` força a simulação, `false` a desliga. Na Vercel, lembre-se de que **cada ambiente tem suas próprias variáveis**: um valor definido só em Production não vale nos previews, e vice-versa. Alterar a variável exige **refazer o deploy** para valer.
+
+Enquanto a simulação está ativa, a tela de pagamento exibe um aviso de modo de teste.
+
+Outros comandos:
+
+```bash
+pnpm typecheck    # tsc --noEmit
+pnpm build        # build de produção
+pnpm start        # servir o build
+```
+
+## Estrutura
+
+```
+app/                    Rotas do App Router (landing, triagem/[step], minha-inscricao)
+  globals.css           Design system completo (tokens, componentes, print styles)
+components/             Componentes de fluxo (enrollment, triage, student-pass, header)
+  ui/                   Primitivas shadcn
+  api/                  Route handlers — a única camada que fala com o banco
+components/card-form.tsx  Formulário de cartão (tokenização entra aqui)
+lib/enrollment.ts       Tipos, máscaras, validação de CPF e cartão, preço e perguntas da triagem
+lib/api-cliente.ts      Chamadas do navegador para as rotas
+lib/supabase/server.ts  Cliente Supabase com a chave secreta (nunca importar no cliente)
+lib/session.ts          Cookie httpOnly da sessão do funil
+supabase/migrations/    Schema versionado
+public/                 Ícones, manifest PWA e service worker
+```
+
+## Pontos de integração pendentes
+
+O funil está ligado à **Únicopag** em produção. PIX e cartão criam cobrança de verdade.
+
+| Etapa | Estado |
+| --- | --- |
+| Cadastro, triagem, número de inscrição | Real |
+| Cobrança PIX e cartão | **Real** — Únicopag |
+| Confirmação de pagamento | **Real** — postback verificado contra a API |
+| QR Code exibido | Decorativo; o código copia-e-cola é o real |
+
+Ainda pendente: o QR desenhado em `components/clinical-header.tsx` é visual e não codifica o payload — quem paga precisa usar o copia-e-cola.
+
+### Como a cobrança funciona
+
+`POST /public/v1/payments` recebe `amount` em centavos, `customer` (nome, e-mail, telefone e CPF — todos obrigatórios), `cart` com a composição do preço e `postback_url`. A resposta traz o `hash` da transação, que gravamos em `pagamentos.provedor_id`, e o `pix.pix_qr_code`, que é o copia-e-cola exibido ao aluno.
+
+**O e-mail é obrigatório para o provedor**, por isso ele passou a ser pedido já na primeira etapa do funil — antes ele só aparecia na triagem, que acontece depois do pagamento.
+
+### Prazo do PIX
+
+A Únicopag mantém o código pagável por 24 horas (`expire_in_days`). A tela **não** marca a cobrança como expirada por conta própria quando há provedor — quem define a validade é ele. A versão anterior encerrava aos 30 minutos, e um aluno que pagasse no minuto 31 tinha o dinheiro debitado e a inscrição recusada pelo nosso próprio código.
+
+Pelo mesmo motivo, `confirmar_pagamento` honra um pagamento confirmado pelo provedor mesmo se a cobrança estiver marcada como expirada: quem chama já verificou contra a API, então o pagamento é fato consumado.
+
+### Confirmação de pagamento
+
+A confirmação tem **dois caminhos independentes**, porque depender só do postback significaria deixar o aluno na tela de espera sempre que ele falhasse:
+
+1. **Postback** — a Únicopag avisa em `/api/webhooks/unicopag`.
+2. **Consulta ativa** — `GET /api/pagamentos/atual`, que a tela consulta a cada 10 segundos, pergunta o status direto à API quando a cobrança está pendente.
+
+O postback da Únicopag **não é fonte da verdade**. A documentação não descreve assinatura, então qualquer um que descobrisse a URL poderia forjar um "pago". O que chega serve apenas de gatilho: o `hash` é usado para consultar `GET /public/v1/transactions/:hash`, e é essa resposta que decide. Verificado na prática — um postback forjado dizendo `paid` não confirma a inscrição.
+
+### Dados de cartão e PCI-DSS
+
+A API da Únicopag **recebe o número do cartão em claro**; não há tokenização no navegador. O dado atravessa o nosso servidor a caminho do provedor, o que coloca a aplicação no escopo de PCI-DSS. As regras em vigor:
+
+- número, CVV e validade **nunca** são gravados em banco, log ou arquivo — existem só em memória durante a requisição;
+- o objeto `card` nunca entra em `console.log` nem em mensagem de erro;
+- do cartão, o banco guarda apenas bandeira e últimos 4 dígitos, que a própria Únicopag devolve.
+
+
+## Contribuindo
+
+Todo o trabalho entra por pull request. Ver [CONTRIBUTING.md](CONTRIBUTING.md).
