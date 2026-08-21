@@ -10,7 +10,7 @@ type Payload = { pagamentoId?: string }
  * Confirma uma cobrança e promove a inscrição, a pedido do próprio
  * navegador. É o atalho de simulação usado enquanto não há provedor.
  *
- * Fica atrás de NEXT_PUBLIC_SIMULAR_PAGAMENTO porque confirmar o próprio
+ * Fica atrás de SIMULAR_PAGAMENTO porque confirmar o próprio
  * pagamento sem pagar é exatamente o que um aluno mal-intencionado faria.
  * Com a variável ausente, esta rota responde 403 e só o webhook — que exige
  * o token do provedor — consegue confirmar.
