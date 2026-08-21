@@ -197,36 +197,3 @@ h1,h2,h3 { font-family: var(--font-archivo), sans-serif; line-height: 1.08; lett
 @keyframes cross-in { from { opacity: 0; transform: scale(.4); } to { opacity: 1; transform: scale(2.2); } }
 @media (prefers-reduced-motion: reduce) { *,*::before,*::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .01ms !important; } }
 @media print { .pass-page > header,.pass-actions { display:none; } .pass-page { padding:0; } .student-pass { border:1px solid #000; } }
-
-.method-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 22px; }
-.method-tab { min-height: 52px; display: flex; align-items: center; justify-content: center; gap: 8px; border: 1px solid var(--rule); border-radius: 3px; background: var(--card); color: var(--ink-soft); font-weight: 700; font-size: 14px; cursor: pointer; transition: border-color .18s, color .18s, background .18s; }
-.method-tab svg { width: 18px; height: 18px; }
-.method-tab:hover { border-color: var(--ink); }
-.method-tab.selected { border-color: var(--ink); background: #f3f2ef; color: var(--ink); }
-
-.card-form { display: flex; flex-direction: column; gap: 18px; }
-.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.field select { min-height: 52px; width: 100%; border: 1px solid var(--rule); border-radius: 3px; background: var(--card); color: var(--ink); padding: 12px 14px; font-size: 16px; }
-.input-with-badge { position: relative; }
-.input-with-badge input { padding-right: 108px; }
-.card-brand { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); display: flex; align-items: center; color: var(--ink-soft); font: 700 11px var(--font-mono); text-transform: uppercase; letter-spacing: .04em; pointer-events: none; }
-.card-brand svg { width: 20px; height: 20px; }
-.secure-note { display: flex; align-items: center; gap: 8px; color: var(--ink-soft); font-size: 12px; margin: 0; }
-.secure-note svg { width: 14px; height: 14px; flex: 0 0 auto; }
-
-.status-block.pendente { border-left-color: var(--cvb-red); }
-
-.spin { width: 18px; height: 18px; animation: girar 1s linear infinite; }
-@keyframes girar { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .spin { animation-duration: 3s; } }
-
-.price-breakdown { border-block: 1px solid var(--rule); margin: 18px 0; padding: 4px 0; }
-.price-line { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding: 10px 0; }
-.price-line + .price-line { border-top: 1px solid var(--rule); }
-.price-line dt { display: flex; flex-direction: column; gap: 2px; font-size: 14px; font-weight: 650; }
-.price-line dt small { color: var(--ink-soft); font-size: 12px; font-weight: 400; }
-.price-line dd { margin: 0; font: 650 15px var(--font-mono); white-space: nowrap; }
-.price-line.total dt { font-weight: 800; }
-.price-line.total dd { font-weight: 800; }
-
-.simulation-banner { border: 1px dashed var(--cvb-red); color: var(--cvb-red); padding: 10px 12px; margin-bottom: 16px; font-size: 12px; font-weight: 650; }

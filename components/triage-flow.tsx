@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ClinicalHeader } from '@/components/clinical-header'
 import { digits, loadJson, maskCep, saveJson, STORAGE_KEYS, TriageAnswers, triageQuestions } from '@/lib/enrollment'
-import { buscarTriagem, salvarResposta } from '@/lib/api-cliente'
 
 export function TriageFlow({ step }: { step: number }) {
   const router = useRouter()
@@ -12,25 +11,10 @@ export function TriageFlow({ step }: { step: number }) {
   const key = String(step)
   const [answers, setAnswers] = useState<TriageAnswers>({})
   const [error, setError] = useState('')
-
-  // O servidor é a fonte da verdade; o localStorage fica como cache para o
-  // caso de o aluno abrir a triagem offline ou antes de a resposta subir.
-  useEffect(() => {
-    const cache = loadJson<TriageAnswers>(STORAGE_KEYS.triage, {})
-    setAnswers(cache)
-    buscarTriagem()
-      .then(({ respostas }) => {
-        if (Object.keys(respostas).length) setAnswers(respostas as TriageAnswers)
-      })
-      .catch(() => undefined)
-  }, [])
+  useEffect(() => setAnswers(loadJson(STORAGE_KEYS.triage, {})), [])
 
   const save = (value: string | string[] | boolean[]) => {
-    const next = { ...answers, [key]: value }
-    setAnswers(next); saveJson(STORAGE_KEYS.triage, next)
-    // Gravação otimista: a navegação não espera a rede. O cache local cobre
-    // uma falha aqui, e o passo é reenviado se o aluno voltar nele.
-    salvarResposta(step, value).catch(() => undefined)
+    const next = { ...answers, [key]: value }; setAnswers(next); saveJson(STORAGE_KEYS.triage, next)
   }
   const next = () => step === 8 ? router.push('/minha-inscricao') : router.push(`/triagem/${step + 1}`)
   const back = () => step === 1 ? router.push('/?etapa=confirmado') : router.push(`/triagem/${step - 1}`)
