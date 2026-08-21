@@ -228,3 +228,5 @@ h1,h2,h3 { font-family: var(--font-archivo), sans-serif; line-height: 1.08; lett
 .price-line dd { margin: 0; font: 650 15px var(--font-mono); white-space: nowrap; }
 .price-line.total dt { font-weight: 800; }
 .price-line.total dd { font-weight: 800; }
+
+.simulation-banner { border: 1px dashed var(--cvb-red); color: var(--cvb-red); padding: 10px 12px; margin-bottom: 16px; font-size: 12px; font-weight: 650; }

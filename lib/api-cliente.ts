@@ -33,6 +33,8 @@ export type Cobranca = {
   recusaMotivo?: string | null
   criadoEm: string
   minutosParaExpirar: number
+  /** Vem do servidor a cada requisição — ver lib/simulacao.ts. */
+  simulacao: boolean
 }
 
 export class ErroDaApi extends Error {
