@@ -13,14 +13,3 @@ __v0_jsx-dev-runtime.ts
 node_modules
 .next/
 .DS_Store
-
-# Editor
-.idea/
-.vscode/
-
-# Logs
-*.log
-
-# TypeScript
-next-env.d.ts
-*.tsbuildinfo
