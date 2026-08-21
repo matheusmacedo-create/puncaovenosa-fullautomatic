@@ -100,6 +100,20 @@ Sem as variáveis do Supabase a interface sobe normalmente, mas as rotas de API 
 
 As segundas opções são os nomes que a integração Supabase da Vercel injeta sozinha. Num deploy pela Vercel com essa integração ativa, não é preciso configurar nada à mão.
 
+## Antes de vender
+
+`GET /api/diagnostico` responde `prontoParaVender` e lista o que falta. As pendências possíveis:
+
+| Pendência | Efeito |
+| --- | --- |
+| `UNICO_API_KEY` ausente | Nenhuma cobrança é real |
+| Chave recusada pela API | Cobrança falha no ato |
+| Simulação ativa | As cobranças não são reais |
+| `PERMITIR_CONFIRMACAO_MANUAL` ligada | Qualquer visitante conclui a inscrição sem pagar |
+| `NEXT_PUBLIC_SITE_URL` ausente | A Únicopag não consegue avisar o pagamento |
+
+As rotas de pagamento declaram `maxDuration = 60`. A criação de cobrança no cartão leva cerca de 11 segundos na Únicopag, e o limite padrão de uma função na Vercel é 10 — sem isso, o aluno receberia erro numa cobrança possivelmente criada.
+
 ## Publicando na Vercel
 
 1. Em vercel.com, **Add New → Project** e importar `puncaovenosa-fullautomatic`.
@@ -187,7 +201,18 @@ Ainda pendente: o QR desenhado em `components/clinical-header.tsx` é visual e n
 
 **O e-mail é obrigatório para o provedor**, por isso ele passou a ser pedido já na primeira etapa do funil — antes ele só aparecia na triagem, que acontece depois do pagamento.
 
+### Prazo do PIX
+
+A Únicopag mantém o código pagável por 24 horas (`expire_in_days`). A tela **não** marca a cobrança como expirada por conta própria quando há provedor — quem define a validade é ele. A versão anterior encerrava aos 30 minutos, e um aluno que pagasse no minuto 31 tinha o dinheiro debitado e a inscrição recusada pelo nosso próprio código.
+
+Pelo mesmo motivo, `confirmar_pagamento` honra um pagamento confirmado pelo provedor mesmo se a cobrança estiver marcada como expirada: quem chama já verificou contra a API, então o pagamento é fato consumado.
+
 ### Confirmação de pagamento
+
+A confirmação tem **dois caminhos independentes**, porque depender só do postback significaria deixar o aluno na tela de espera sempre que ele falhasse:
+
+1. **Postback** — a Únicopag avisa em `/api/webhooks/unicopag`.
+2. **Consulta ativa** — `GET /api/pagamentos/atual`, que a tela consulta a cada 10 segundos, pergunta o status direto à API quando a cobrança está pendente.
 
 O postback da Únicopag **não é fonte da verdade**. A documentação não descreve assinatura, então qualquer um que descobrisse a URL poderia forjar um "pago". O que chega serve apenas de gatilho: o `hash` é usado para consultar `GET /public/v1/transactions/:hash`, e é essa resposta que decide. Verificado na prática — um postback forjado dizendo `paid` não confirma a inscrição.
 

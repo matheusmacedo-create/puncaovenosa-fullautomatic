@@ -4,6 +4,15 @@ import { traduzirStatus } from '@/lib/pagamento-status'
 import { supabaseServer } from '@/lib/supabase/server'
 import { consultarTransacao } from '@/lib/unicopag'
 
+/**
+ * A criação de cobrança no cartão leva por volta de 11 segundos na Únicopag,
+ * e o limite padrão de uma função na Vercel é 10. Sem isto, o aluno receberia
+ * erro numa cobrança que talvez tenha sido criada — o pior tipo de falha num
+ * checkout. 60s dá folga confortável.
+ */
+export const maxDuration = 60
+
+
 type Postback = { event?: string; hash?: string; id?: string; payment_status?: string }
 
 /**

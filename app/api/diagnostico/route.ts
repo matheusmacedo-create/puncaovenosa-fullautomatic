@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { rota } from '@/lib/http'
 import { lerInscricaoId } from '@/lib/session'
-import { estadoDaSimulacao } from '@/lib/simulacao'
+import { confirmacaoManualPermitida, estadoDaSimulacao } from '@/lib/simulacao'
 import { supabaseServer } from '@/lib/supabase/server'
 import { siteUrl } from '@/lib/site-url'
 import { consultarSaldo, UnicopagErro } from '@/lib/unicopag'
@@ -105,9 +105,21 @@ export function GET(request: Request) {
       erroFuncoes: erroFuncao?.message ?? null,
     }
 
+    // Checklist de venda: o que ainda impede cobrar de um aluno de verdade.
+    // Existe para não depender de alguém lembrar da lista na hora de abrir.
+    const pendencias: string[] = []
+    if (!banco.leTabelas || !banco.temFuncoes) pendencias.push('O banco não respondeu como esperado.')
+    if (!config.provedor.configurado) pendencias.push('UNICO_API_KEY ausente — sem ela nenhuma cobrança é real.')
+    else if (!config.provedor.chaveValida) pendencias.push('A chave da Únicopag foi recusada pela API.')
+    if (config.simulacao.ativa) pendencias.push('Simulação ativa — as cobranças não são reais.')
+    if (confirmacaoManualPermitida()) pendencias.push('PERMITIR_CONFIRMACAO_MANUAL ligada — qualquer visitante conclui a inscrição sem pagar.')
+    if (!config.siteUrl) pendencias.push('NEXT_PUBLIC_SITE_URL ausente — a Únicopag precisa dela para avisar o pagamento.')
+
     return NextResponse.json({
       ok: banco.leTabelas && banco.temFuncoes,
       etapa: banco.leTabelas && banco.temFuncoes ? 'tudo certo' : 'banco',
+      prontoParaVender: pendencias.length === 0,
+      pendencias,
       config,
       banco,
     })

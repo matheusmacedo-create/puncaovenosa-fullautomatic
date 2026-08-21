@@ -20,7 +20,9 @@ type Stage = 'dados' | 'pagamento' | 'confirmado'
 type Cadastro = { primeiroNome: string; telefoneFinal: string; jaPaga: boolean }
 
 const EMPTY: EnrollmentData = { name: '', phone: '', cpf: '', email: '', highSchool: false }
-const INTERVALO_POLLING = 4000
+// 10s: cada consulta pode bater na API da Únicopag, então não convém
+// encurtar sem necessidade.
+const INTERVALO_POLLING = 10_000
 
 export function EnrollmentFlow() {
   const search = useSearchParams()
@@ -127,9 +129,14 @@ export function EnrollmentFlow() {
   const restante = cobranca && agora ? Math.max(0, Math.floor((expiraEm - agora) / 1000)) : null
 
   // Estourou o prazo: encerra a cobrança no servidor uma única vez.
+  //
+  // Só na simulação. Com cobrança real, quem define a validade é o provedor
+  // — a Únicopag mantém o PIX pagável por 24 horas. Encerrar aqui aos 30
+  // minutos marcaria como expirada uma cobrança que o aluno ainda vai pagar.
   const expirando = useRef(false)
   useEffect(() => {
     if (!cobranca || cobranca.metodo !== 'pix' || cobranca.status !== 'pendente') return
+    if (!cobranca.simulacao) return
     if (restante === null || restante > 0 || expirando.current) return
     expirando.current = true
     encerrarCobranca(cobranca.id, 'expirado')
@@ -138,16 +145,30 @@ export function EnrollmentFlow() {
       .finally(() => { expirando.current = false })
   }, [cobranca, restante])
 
+  /**
+   * A cobrança no cartão só nasce quando o formulário é enviado.
+   *
+   * Criar ao trocar de aba quebrava o cartão inteiro: a API do provedor
+   * exige os dados do cartão na criação, e nesse momento eles ainda não
+   * foram digitados — a resposta era 422 e o formulário nunca aparecia.
+   */
   const trocarMetodo = async (novo: PagamentoMetodo) => {
     if (novo === metodo) return
-    setMetodo(novo); setErroGeral(''); setCobranca(null)
-    try { setCobranca(await criarCobranca({ metodo: novo })) }
-    catch (e) { setErroGeral(e instanceof ErroDaApi ? e.message : 'Não foi possível trocar o meio de pagamento.') }
+    setMetodo(novo); setErroGeral('')
+    if (novo === 'cartao') return
+    // Voltando ao PIX: reaproveita a cobrança pendente, se ainda houver.
+    if (cobranca?.metodo === 'pix' && cobranca.status === 'pendente') return
+    setCobranca(null)
+    try { setCobranca(await criarCobranca({ metodo: 'pix' })) }
+    catch (e) { setErroGeral(e instanceof ErroDaApi ? e.message : 'Não foi possível abrir a cobrança.') }
   }
 
   const gerarNovoCodigo = async () => {
     setErroGeral(''); setCobranca(null)
-    try { setCobranca(await criarCobranca({ metodo })) }
+    // No cartão, "tentar de novo" é voltar ao formulário — sem os dados não
+    // há o que recriar.
+    if (metodo === 'cartao') return
+    try { setCobranca(await criarCobranca({ metodo: 'pix' })) }
     catch (e) { setErroGeral(e instanceof ErroDaApi ? e.message : 'Não foi possível gerar novo código.') }
   }
 
@@ -187,7 +208,9 @@ export function EnrollmentFlow() {
         },
       })
       setCobranca(nova)
-      // [SIMULAÇÃO] Sem provedor, a cobrança no cartão é dada como aprovada.
+      // O cartão costuma ter desfecho imediato. Sem isto, uma cobrança
+      // aprovada de verdade ficava parada na tela de pagamento.
+      if (nova.status === 'confirmado') { go('confirmado'); return }
       if (nova.simulacao) await aprovar(nova.id)
     } catch (e) {
       setErroGeral(e instanceof ErroDaApi ? e.message : 'Não foi possível processar o cartão.')
@@ -309,20 +332,22 @@ function PaymentStage({ metodo, cobranca, copied, restante, enviando, erroGeral,
         ? <p className="simulation-banner" role="status">Cobrança real, com conferência manual liberada para teste. Remova a variável antes de receber aluno.</p>
         : null}
     {erroGeral && <p className="error" role="alert">{erroGeral}</p>}
-    {!cobranca && !erroGeral && <p className="payment-status"><Loader2 className="spin" /><span>Preparando o pagamento…</span></p>}
+    {!cobranca && !erroGeral && metodo === 'pix' && <p className="payment-status"><Loader2 className="spin" /><span>Preparando o pagamento…</span></p>}
 
-    {cobranca?.status === 'expirado' ? <div className="state-message"><h3>Código expirado</h3><p>Este código não aceita mais pagamentos.</p><button className="primary-button full" onClick={gerarNovoCodigo}>Gerar novo código</button></div>
-      : cobranca?.status === 'recusado' ? <div className="state-message"><h3>Pagamento recusado</h3><p>{cobranca.recusaMotivo || 'O banco emissor não autorizou a cobrança.'}</p><button className="primary-button full" onClick={gerarNovoCodigo}>Tentar de novo</button></div>
+    {cobranca?.status === 'expirado' && cobranca.metodo === metodo ? <div className="state-message"><h3>Código expirado</h3><p>Este código não aceita mais pagamentos.</p><button className="primary-button full" onClick={gerarNovoCodigo}>Gerar novo código</button></div>
+      : cobranca?.status === 'recusado' && cobranca.metodo === metodo ? <div className="state-message"><h3>Pagamento recusado</h3><p>{cobranca.recusaMotivo || 'O banco emissor não autorizou a cobrança.'}</p><button className="primary-button full" onClick={gerarNovoCodigo}>Tentar de novo</button></div>
       : cobranca && metodo === 'pix' ? <>
         <div className="payment-desktop-qr"><CodigoQr conteudo={cobranca.pixCopiaCola} descricao="QR Code para pagar o PIX" /></div>
         <button className={`copy-button ${copied ? 'copied' : ''}`} onClick={copyPix}>{copied ? <><Check /> Código copiado</> : 'Copiar código PIX'}</button>
         {copied && <p className="copy-help">{cobranca.simulacao ? 'Modo de teste — seguindo para a próxima etapa…' : 'Agora abra o app do seu banco, escolha PIX Copia e Cola e conclua o pagamento.'}</p>}
         <code className="pix-code">{cobranca.pixCopiaCola}</code>
         <details className="qr-disclosure"><summary>Ver QR Code ampliado</summary><div className="qr-wrap"><CodigoQr conteudo={cobranca.pixCopiaCola} descricao="QR Code para pagar o PIX" lado={280} /></div></details>
-        <p className={`timer ${restante !== null && restante <= 300 ? 'warning' : ''}`}>Este código expira em {timer}</p>
+        {cobranca.simulacao
+          ? <p className={`timer ${restante !== null && restante <= 300 ? 'warning' : ''}`}>Este código expira em {timer}</p>
+          : <p className="timer">Este código vale por 24 horas. Você pode pagar agora ou mais tarde.</p>}
         <div className="payment-status"><span className="pulse" /><span>Aguardando confirmação do pagamento…</span></div>
       </>
-      : cobranca && metodo === 'cartao' ? <CardForm enviando={enviando} cartao={cartao} setCartao={setCartao} onSubmit={pagarComCartao} />
+      : metodo === 'cartao' ? <CardForm enviando={enviando} cartao={cartao} setCartao={setCartao} onSubmit={pagarComCartao} />
       : null}
 
     {cobranca?.confirmacaoManual && <div className="dev-tools">
