@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { Download, Share2 } from 'lucide-react'
-import { RedCross, VisualQr } from '@/components/clinical-header'
+import { RedCross } from '@/components/clinical-header'
+import { CodigoQr } from '@/components/qr-code'
 import { EnrollmentData, loadJson, maskCpf, STORAGE_KEYS } from '@/lib/enrollment'
 import { buscarInscricao, Inscricao } from '@/lib/api-cliente'
 import { ServiceWorkerRegistration } from '@/components/service-worker-registration'
@@ -50,7 +51,9 @@ export function StudentPass() {
     <article className="student-pass" aria-label="Ficha de inscrição do aluno" aria-busy={carregando}>
       <div className="pass-band"><span>Identificação do aluno</span><span>{confirmada ? 'Confirmada' : 'Pendente'}</span></div>
       <div className="pass-content">
-        <VisualQr />
+        {inscricao?.validacaoUrl
+          ? <CodigoQr conteudo={inscricao.validacaoUrl} descricao="QR Code de identificação do aluno, para conferência na instituição" lado={200} />
+          : <div className="qr-vazio" style={{ width: 200, height: 200 }} aria-hidden="true" />}
         <h2 className="pass-name">{nome}</h2>
         <p className="pass-id">CPF {cpfMascarado}{numero ? ` · INSCRIÇÃO ${numero}` : ''}</p>
         <div className="data-grid">

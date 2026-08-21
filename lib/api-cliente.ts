@@ -17,6 +17,8 @@ export type Inscricao = {
   email: string | null
   status: 'rascunho' | 'aguardando_pagamento' | 'paga' | 'triagem_concluida' | 'cancelada'
   numeroInscricao: string | null
+  /** Endereço que o QR Code da ficha carrega, para conferência presencial. */
+  validacaoUrl: string
   passosRespondidos: number
 }
 
@@ -35,6 +37,8 @@ export type Cobranca = {
   minutosParaExpirar: number
   /** Vem do servidor a cada requisição — ver lib/simulacao.ts. */
   simulacao: boolean
+  /** Libera os controles de conferência manual, mesmo com cobrança real. */
+  confirmacaoManual: boolean
 }
 
 export class ErroDaApi extends Error {

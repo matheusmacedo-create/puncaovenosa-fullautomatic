@@ -42,6 +42,9 @@ Use **pnpm**, nunca npm ou yarn — o lockfile é do pnpm e o CI roda com `--fro
 - O postback **não é fonte da verdade**: não há assinatura documentada. Use o `hash` para consultar a transação e decida pela resposta da API. Nunca confirme pagamento a partir do corpo recebido.
 - `PIX_RECEBEDOR` e `lib/pix.ts` são usados **apenas na simulação**. Com provedor configurado, o copia-e-cola vem da Únicopag.
 - Preço: R$ 99 de matrícula + R$ 150 de curso = R$ 249, cobrados juntos. `PRECO_CENTAVOS` é **derivado** de `COMPOSICAO_PRECO`; não escreva o total solto em lugar nenhum. Uma constraint no banco exige que `pagamentos.itens` feche com `valor_centavos`.
+- O QR Code é real (`components/qr-code.tsx`, biblioteca `qrcode`, gerado no navegador). O `VisualQr` de `clinical-header.tsx` é decorativo e não codifica nada — não use onde precise ser lido.
+- Token de credencial em **hexadecimal**, nunca base64: `=` e `+` são ambíguos em URL e quebram a validação.
+- `SIMULAR_PAGAMENTO` decide se a COBRANÇA é falsa; `PERMITIR_CONFIRMACAO_MANUAL` decide se dá para marcar como paga pela interface. São coisas distintas: dá para ter cobrança real da Únicopag e ainda assim confirmar à mão para testar.
 - O código PIX é montado em `lib/pix.ts`, nunca à mão. O payload EMV é TLV (tag, tamanho, valor): um tamanho errado desalinha o leitor, o app do banco não acha o valor e libera o pagador para digitar qualquer quantia. Foi exatamente esse o bug do código estático anterior.
 
 ## Fluxo de trabalho

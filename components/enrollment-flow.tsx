@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Check, CreditCard, Loader2, QrCode, X } from 'lucide-react'
-import { ClinicalHeader, RedCross, VisualQr } from '@/components/clinical-header'
+import { ClinicalHeader, RedCross } from '@/components/clinical-header'
+import { CodigoQr } from '@/components/qr-code'
 import { CardForm } from '@/components/card-form'
 import { PriceBreakdown } from '@/components/price-breakdown'
 import {
@@ -302,25 +303,29 @@ function PaymentStage({ metodo, cobranca, copied, restante, enviando, erroGeral,
       <button role="tab" aria-selected={metodo === 'cartao'} className={`method-tab ${metodo === 'cartao' ? 'selected' : ''}`} onClick={() => trocarMetodo('cartao')}><CreditCard /> Cartão</button>
     </div>
 
-    {cobranca?.simulacao && <p className="simulation-banner" role="status">Modo de teste — o pagamento é aprovado automaticamente e nenhuma cobrança é feita.</p>}
+    {cobranca?.simulacao
+      ? <p className="simulation-banner" role="status">Modo de teste — o pagamento é aprovado automaticamente e nenhuma cobrança é feita.</p>
+      : cobranca?.confirmacaoManual
+        ? <p className="simulation-banner" role="status">Cobrança real, com conferência manual liberada para teste. Remova a variável antes de receber aluno.</p>
+        : null}
     {erroGeral && <p className="error" role="alert">{erroGeral}</p>}
     {!cobranca && !erroGeral && <p className="payment-status"><Loader2 className="spin" /><span>Preparando o pagamento…</span></p>}
 
     {cobranca?.status === 'expirado' ? <div className="state-message"><h3>Código expirado</h3><p>Este código não aceita mais pagamentos.</p><button className="primary-button full" onClick={gerarNovoCodigo}>Gerar novo código</button></div>
       : cobranca?.status === 'recusado' ? <div className="state-message"><h3>Pagamento recusado</h3><p>{cobranca.recusaMotivo || 'O banco emissor não autorizou a cobrança.'}</p><button className="primary-button full" onClick={gerarNovoCodigo}>Tentar de novo</button></div>
       : cobranca && metodo === 'pix' ? <>
-        <div className="payment-desktop-qr"><VisualQr /></div>
+        <div className="payment-desktop-qr"><CodigoQr conteudo={cobranca.pixCopiaCola} descricao="QR Code para pagar o PIX" /></div>
         <button className={`copy-button ${copied ? 'copied' : ''}`} onClick={copyPix}>{copied ? <><Check /> Código copiado</> : 'Copiar código PIX'}</button>
         {copied && <p className="copy-help">{cobranca.simulacao ? 'Modo de teste — seguindo para a próxima etapa…' : 'Agora abra o app do seu banco, escolha PIX Copia e Cola e conclua o pagamento.'}</p>}
         <code className="pix-code">{cobranca.pixCopiaCola}</code>
-        <details className="qr-disclosure"><summary>Ver QR Code para pagar em outro aparelho</summary><div className="qr-wrap"><VisualQr /></div></details>
+        <details className="qr-disclosure"><summary>Ver QR Code ampliado</summary><div className="qr-wrap"><CodigoQr conteudo={cobranca.pixCopiaCola} descricao="QR Code para pagar o PIX" lado={280} /></div></details>
         <p className={`timer ${restante !== null && restante <= 300 ? 'warning' : ''}`}>Este código expira em {timer}</p>
         <div className="payment-status"><span className="pulse" /><span>Aguardando confirmação do pagamento…</span></div>
       </>
       : cobranca && metodo === 'cartao' ? <CardForm enviando={enviando} cartao={cartao} setCartao={setCartao} onSubmit={pagarComCartao} />
       : null}
 
-    {cobranca?.simulacao && <div className="dev-tools">
+    {cobranca?.confirmacaoManual && <div className="dev-tools">
       <small>Simulação · não use em produção</small>
       <button onClick={() => simular('pago')}>Simular pagamento confirmado</button>
       <button onClick={() => simular('expirado')}>Simular expirado</button>

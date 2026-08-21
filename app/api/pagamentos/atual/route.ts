@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { erro, rota } from '@/lib/http'
 import { lerInscricaoId } from '@/lib/session'
-import { simulacaoAtiva } from '@/lib/simulacao'
+import { confirmacaoManualPermitida, simulacaoAtiva } from '@/lib/simulacao'
 import { supabaseServer } from '@/lib/supabase/server'
 import { MINUTOS_PARA_EXPIRAR } from '@/lib/enrollment'
 
@@ -27,7 +27,7 @@ export function GET() {
       console.error('[funil] leitura de pagamento falhou:', error)
       return erro('Não foi possível consultar o pagamento.', 502)
     }
-    if (!data) return NextResponse.json({ existe: false, simulacao: simulacaoAtiva() })
+    if (!data) return NextResponse.json({ existe: false, simulacao: simulacaoAtiva(), confirmacaoManual: confirmacaoManualPermitida() })
 
     return NextResponse.json({
       existe: true,
@@ -42,6 +42,7 @@ export function GET() {
       criadoEm: data.criado_em,
       minutosParaExpirar: MINUTOS_PARA_EXPIRAR,
       simulacao: simulacaoAtiva(),
+      confirmacaoManual: confirmacaoManualPermitida(),
     })
   })
 }

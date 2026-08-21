@@ -230,3 +230,25 @@ h1,h2,h3 { font-family: var(--font-archivo), sans-serif; line-height: 1.08; lett
 .price-line.total dd { font-weight: 800; }
 
 .simulation-banner { border: 1px dashed var(--cvb-red); color: var(--cvb-red); padding: 10px 12px; margin-bottom: 16px; font-size: 12px; font-weight: 650; }
+
+.qr-real { display: block; width: 100%; max-width: 260px; height: auto; image-rendering: pixelated; background: var(--card); padding: 8px; outline: 1px solid var(--rule); }
+.qr-vazio { background: repeating-linear-gradient(45deg, #f3f2ef, #f3f2ef 6px, var(--card) 6px, var(--card) 12px); outline: 1px solid var(--rule); max-width: 100%; }
+.qr-erro { color: var(--cvb-red); font-size: 13px; margin: 0; }
+
+.validacao-page { max-width: 520px; margin: 0 auto; padding: 24px 20px 40px; display: flex; flex-direction: column; gap: 20px; }
+.validacao-page > header { display: flex; align-items: center; gap: 10px; font: 700 12px var(--font-mono); text-transform: uppercase; letter-spacing: .06em; color: var(--ink-soft); }
+.validacao { border: 1px solid var(--rule); border-top-width: 6px; padding: 24px 20px; display: flex; flex-direction: column; gap: 14px; }
+.validacao.liberada { border-top-color: var(--ok); }
+.validacao.negada { border-top-color: var(--cvb-red); }
+.validacao-selo { align-self: flex-start; font: 700 11px var(--font-mono); text-transform: uppercase; letter-spacing: .08em; padding: 6px 10px; }
+.validacao.liberada .validacao-selo { background: var(--ok); color: var(--card); }
+.validacao.negada .validacao-selo { background: var(--cvb-red); color: var(--card); }
+.validacao h1 { font-size: 30px; line-height: 1.1; margin: 0; }
+.validacao-situacao { font-weight: 700; margin: 0; }
+.validacao-dados { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; border-block: 1px solid var(--rule); padding: 16px 0; margin: 0; }
+.validacao-dados dt { font: 10px var(--font-mono); text-transform: uppercase; letter-spacing: .06em; color: var(--ink-soft); }
+.validacao-dados dd { margin: 2px 0 0; font-weight: 700; font-size: 15px; }
+.validacao-aviso { background: #f3f2ef; border-left: 3px solid var(--cvb-red); padding: 12px 14px; margin: 0; font-weight: 650; }
+.validacao-hora { color: var(--ink-soft); font: 11px var(--font-mono); margin: 0; }
+.validacao-rodape { color: var(--ink-soft); font-size: 12px; margin: 0; }
+@media (max-width: 380px) { .validacao-dados { grid-template-columns: 1fr; } }

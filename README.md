@@ -59,6 +59,16 @@ Três funções no banco mantêm atômico o que seria uma sequência de queries:
 | `POST /api/webhooks/unicopag` | Postback da Únicopag — confirma consultando a API, não confia no corpo |
 | `GET /api/diagnostico` | Estado da configuração e da simulação |
 
+### Credencial do aluno
+
+Cada inscrição carrega um `token_validacao` — 128 bits aleatórios em hexadecimal, gerado pelo banco. O QR Code da ficha aponta para `/validar/<token>`, e é essa página que qualquer pessoa da instituição abre ao escanear, sem login.
+
+Hexadecimal, e não base64: base64 termina em `=` e pode conter `+`, que numa URL são ambíguos — o token que chega ao servidor deixa de ser o do banco e a credencial válida é recusada. Aconteceu no primeiro desenho.
+
+A página mostra só o necessário para conferir a pessoa com um documento: nome, número de inscrição, miolo do CPF e situação. Cada leitura é registrada em `validacoes`, com o horário — que aparece na tela justamente para denunciar uma captura de tela antiga sendo exibida no lugar de uma conferência real.
+
+O QR **não** usa serviço externo: é gerado no próprio navegador pela biblioteca `qrcode`. Dado de aluno não precisa passar por terceiros para virar imagem.
+
 ### Dados de cartão e PCI
 
 O número do cartão, o CVV e a validade **nunca** trafegam pela nossa API nem são gravados. `POST /api/pagamentos` rejeita explicitamente qualquer corpo que contenha esses campos. O banco guarda apenas bandeira, últimos 4 dígitos e parcelas. A tokenização acontece no navegador, pelo SDK do provedor.

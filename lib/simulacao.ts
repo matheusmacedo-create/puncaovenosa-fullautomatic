@@ -52,3 +52,23 @@ export function estadoDaSimulacao(): { ativa: boolean; motivo: MotivoDaSimulacao
 }
 
 export const simulacaoAtiva = (): boolean => estadoDaSimulacao().ativa
+
+/**
+ * Libera os controles de conferência manual da tela de pagamento.
+ *
+ * Existe separado de `simulacaoAtiva` porque são coisas diferentes: a
+ * simulação decide se a COBRANÇA é falsa; isto decide se alguém pode marcar
+ * como paga pela interface. Enquanto se testa a integração, faz sentido ter
+ * cobrança real da Únicopag — com QR Code de verdade — e ainda assim poder
+ * avançar sem pagar.
+ *
+ * Com simulação ativa vem junto, porque ali não há o que conferir de fato.
+ *
+ * ATENÇÃO: com isto ligado e provedor configurado, qualquer visitante
+ * conclui a inscrição sem pagar, mesmo a cobrança sendo real. É para
+ * ambiente de teste. Remova antes de receber aluno.
+ */
+export function confirmacaoManualPermitida(): boolean {
+  if (process.env.PERMITIR_CONFIRMACAO_MANUAL?.trim().toLowerCase() === 'true') return true
+  return simulacaoAtiva()
+}

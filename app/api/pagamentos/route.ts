@@ -6,7 +6,7 @@ import { corpo, erro, rota } from '@/lib/http'
 import { traduzirStatus } from '@/lib/pagamento-status'
 import { gerarPixCopiaCola } from '@/lib/pix'
 import { lerInscricaoId } from '@/lib/session'
-import { simulacaoAtiva } from '@/lib/simulacao'
+import { confirmacaoManualPermitida, simulacaoAtiva } from '@/lib/simulacao'
 import { supabaseServer } from '@/lib/supabase/server'
 import { urlDoWebhook } from '@/lib/site-url'
 import { criarPagamento, NovoPagamento, UnicopagErro } from '@/lib/unicopag'
@@ -166,6 +166,7 @@ export function POST(request: Request) {
       criadoEm: data.criado_em,
       minutosParaExpirar: MINUTOS_PARA_EXPIRAR,
       simulacao: simulando,
+      confirmacaoManual: confirmacaoManualPermitida(),
     })
   })
 }
