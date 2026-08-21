@@ -56,7 +56,7 @@ Três funções no banco mantêm atômico o que seria uma sequência de queries:
 | `POST /api/pagamentos/confirmar` | Confirma e promove a inscrição (só com a simulação ligada) |
 | `POST /api/pagamentos/desfecho` | Encerra como `expirado` ou `recusado` |
 | `GET`/`PUT` `/api/triagem` | Lê e grava as respostas da triagem |
-| `POST /api/webhooks/pix` | Confirmação servidor-a-servidor do provedor |
+| `POST /api/webhooks/unicopag` | Postback da Únicopag — confirma consultando a API, não confia no corpo |
 | `GET /api/diagnostico` | Estado da configuração e da simulação |
 
 ### Dados de cartão e PCI
@@ -160,13 +160,35 @@ public/                 Ícones, manifest PWA e service worker
 
 ## Pontos de integração pendentes
 
-Persistência, consulta por CPF, número de inscrição e triagem já são reais. O que falta é o dinheiro de verdade:
+O funil está ligado à **Únicopag** em produção. PIX e cartão criam cobrança de verdade.
 
-- **Cobrança no provedor** — `POST /api/pagamentos` registra a intenção, mas não chama a Único. É onde `provedor_id` passa a ser preenchido.
-- **Tokenização do cartão** — `components/card-form.tsx` valida e formata, mas ainda não tokeniza; hoje envia um token simulado.
-- **Chave PIX** — `PIX_RECEBEDOR.chave` em `lib/enrollment.ts` é um placeholder. O payload já é montado corretamente por cobrança em `lib/pix.ts`, mas o dinheiro só cai quando a chave real da Cruz Vermelha entrar ali.
-- **Webhook** — `POST /api/webhooks/pix` está implementado e protegido por `PIX_WEBHOOK_TOKEN`, mas troque a comparação de token pela verificação de assinatura que o provedor documentar.
-- **QR Code** — o QR de `components/clinical-header.tsx` é visual e não codifica dados reais.
+| Etapa | Estado |
+| --- | --- |
+| Cadastro, triagem, número de inscrição | Real |
+| Cobrança PIX e cartão | **Real** — Únicopag |
+| Confirmação de pagamento | **Real** — postback verificado contra a API |
+| QR Code exibido | Decorativo; o código copia-e-cola é o real |
+
+Ainda pendente: o QR desenhado em `components/clinical-header.tsx` é visual e não codifica o payload — quem paga precisa usar o copia-e-cola.
+
+### Como a cobrança funciona
+
+`POST /public/v1/payments` recebe `amount` em centavos, `customer` (nome, e-mail, telefone e CPF — todos obrigatórios), `cart` com a composição do preço e `postback_url`. A resposta traz o `hash` da transação, que gravamos em `pagamentos.provedor_id`, e o `pix.pix_qr_code`, que é o copia-e-cola exibido ao aluno.
+
+**O e-mail é obrigatório para o provedor**, por isso ele passou a ser pedido já na primeira etapa do funil — antes ele só aparecia na triagem, que acontece depois do pagamento.
+
+### Confirmação de pagamento
+
+O postback da Únicopag **não é fonte da verdade**. A documentação não descreve assinatura, então qualquer um que descobrisse a URL poderia forjar um "pago". O que chega serve apenas de gatilho: o `hash` é usado para consultar `GET /public/v1/transactions/:hash`, e é essa resposta que decide. Verificado na prática — um postback forjado dizendo `paid` não confirma a inscrição.
+
+### Dados de cartão e PCI-DSS
+
+A API da Únicopag **recebe o número do cartão em claro**; não há tokenização no navegador. O dado atravessa o nosso servidor a caminho do provedor, o que coloca a aplicação no escopo de PCI-DSS. As regras em vigor:
+
+- número, CVV e validade **nunca** são gravados em banco, log ou arquivo — existem só em memória durante a requisição;
+- o objeto `card` nunca entra em `console.log` nem em mensagem de erro;
+- do cartão, o banco guarda apenas bandeira e últimos 4 dígitos, que a própria Únicopag devolve.
+
 
 ## Contribuindo
 

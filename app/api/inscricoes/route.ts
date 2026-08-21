@@ -4,7 +4,7 @@ import { corpo, erro, rota } from '@/lib/http'
 import { gravarInscricaoId } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabase/server'
 
-type Payload = { name?: string; phone?: string; cpf?: string; highSchool?: boolean }
+type Payload = { name?: string; phone?: string; cpf?: string; email?: string; highSchool?: boolean }
 
 /**
  * Cria ou atualiza a inscrição a partir do CPF e abre a sessão do funil.
@@ -21,10 +21,11 @@ export function POST(request: Request) {
       name: (body.name ?? '').trim(),
       phone: body.phone ?? '',
       cpf: body.cpf ?? '',
+      email: (body.email ?? '').trim(),
       highSchool: body.highSchool === true,
     }
 
-    const campos = ['name', 'phone', 'cpf', 'highSchool'] as const
+    const campos = ['name', 'phone', 'cpf', 'email', 'highSchool'] as const
     for (const campo of campos) {
       const mensagem = fieldError(campo, dados)
       if (mensagem) return erro(mensagem, 422)
@@ -36,6 +37,7 @@ export function POST(request: Request) {
         p_nome: dados.name,
         p_telefone: digits(dados.phone),
         p_ensino_medio: dados.highSchool,
+        p_email: dados.email,
       })
       .single<{ id: string; status: string; numero_inscricao: string | null; ja_paga: boolean }>()
 

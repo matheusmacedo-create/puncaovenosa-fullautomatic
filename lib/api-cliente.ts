@@ -67,12 +67,18 @@ export const consultarCpf = (cpf: string) =>
     `/api/inscricoes/consulta?cpf=${encodeURIComponent(cpf)}`,
   )
 
+/**
+ * Abre a cobrança.
+ *
+ * PCI-DSS: a API da Únicopag recebe o número do cartão em claro — não há
+ * tokenização no navegador. Os dados vão por HTTPS para a nossa rota, que
+ * os repassa ao provedor e os descarta. Nada de cartão é gravado aqui, nem
+ * em `localStorage`, nem em qualquer cache.
+ */
 export const criarCobranca = (payload: {
   metodo: PagamentoMetodo
   parcelas?: number
-  token?: string
-  bandeira?: string | null
-  ultimos4?: string
+  cartao?: { numero: string; nome: string; validade: string; cvv: string }
 }) => pedir<Cobranca>('/api/pagamentos', { method: 'POST', body: JSON.stringify(payload) })
 
 export const buscarCobranca = () => pedir<Cobranca & { existe: boolean }>('/api/pagamentos/atual')

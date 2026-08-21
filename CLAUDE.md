@@ -37,7 +37,10 @@ Use **pnpm**, nunca npm ou yarn — o lockfile é do pnpm e o CI roda com `--fro
 - Ao escrever função PL/pgSQL com `returns table`, não repita nome de coluna da tabela nos campos de retorno sem qualificar com alias — o Postgres aborta com "column reference is ambiguous". Já aconteceu em `confirmar_pagamento`.
 - A simulação de pagamento é **derivada do ambiente**: sem chave de provedor (`UNICO_API_KEY`) ela liga sozinha, porque é o único modo que funciona; com a chave, desliga. `SIMULAR_PAGAMENTO` sobrescreve os dois lados. Nunca condicione isso a `NODE_ENV`: na Vercel todo deploy é `production`.
 - `/api/diagnostico` é público de propósito — ele existe para explicar por que a configuração não está funcionando, e seria inútil se exigisse a configuração funcionando. Nunca devolva valor de chave ali, só o prefixo.
-- Cobrança no provedor e tokenização ainda são **simuladas**. Trechos marcados com `[INTEGRAÇÃO]` sinalizam onde entra o provedor de verdade. A chave PIX em `PIX_RECEBEDOR` é placeholder.
+- O provedor é a **Únicopag** (`lib/unicopag.ts`). Autenticação por query string `api_token`, valores em centavos. `customer.email` e `postback_url` são obrigatórios — foi por isso que o e-mail subiu para a primeira etapa do funil.
+- A API da Únicopag **recebe o número do cartão em claro**: não há tokenização no navegador, e o dado passa pelo nosso servidor. Nunca grave, logue ou devolva `card`. O banco guarda só bandeira e últimos 4.
+- O postback **não é fonte da verdade**: não há assinatura documentada. Use o `hash` para consultar a transação e decida pela resposta da API. Nunca confirme pagamento a partir do corpo recebido.
+- `PIX_RECEBEDOR` e `lib/pix.ts` são usados **apenas na simulação**. Com provedor configurado, o copia-e-cola vem da Únicopag.
 - Preço: R$ 99 de matrícula + R$ 150 de curso = R$ 249, cobrados juntos. `PRECO_CENTAVOS` é **derivado** de `COMPOSICAO_PRECO`; não escreva o total solto em lugar nenhum. Uma constraint no banco exige que `pagamentos.itens` feche com `valor_centavos`.
 - O código PIX é montado em `lib/pix.ts`, nunca à mão. O payload EMV é TLV (tag, tamanho, valor): um tamanho errado desalinha o leitor, o app do banco não acha o valor e libera o pagador para digitar qualquer quantia. Foi exatamente esse o bug do código estático anterior.
 

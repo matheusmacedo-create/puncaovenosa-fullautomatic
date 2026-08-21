@@ -2,6 +2,8 @@ export type EnrollmentData = {
   name: string
   phone: string
   cpf: string
+  /** Obrigatório: a Únicopag exige `customer.email` para criar a cobrança. */
+  email: string
   highSchool: boolean
 }
 
@@ -57,8 +59,14 @@ export function isValidCpf(value: string) {
   return calc(9) === Number(cpf[9]) && calc(10) === Number(cpf[10])
 }
 
+export const EMAIL_PLAUSIVEL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
 export function fieldError(field: keyof EnrollmentData, data: EnrollmentData) {
   if (field === 'name') return data.name.trim().split(/\s+/).length < 2 ? 'Digite seu nome e sobrenome.' : ''
+  if (field === 'email') {
+    if (!data.email.trim()) return 'Informe seu e-mail — o comprovante do pagamento é enviado nele.'
+    return EMAIL_PLAUSIVEL.test(data.email.trim()) ? '' : 'Confira o e-mail digitado.'
+  }
   if (field === 'phone') {
     const missing = 11 - digits(data.phone).length
     return missing > 0 ? `WhatsApp incompleto — faltam ${missing} dígito${missing > 1 ? 's' : ''}.` : ''

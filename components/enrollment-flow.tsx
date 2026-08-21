@@ -7,7 +7,7 @@ import { ClinicalHeader, RedCross, VisualQr } from '@/components/clinical-header
 import { CardForm } from '@/components/card-form'
 import { PriceBreakdown } from '@/components/price-breakdown'
 import {
-  bandeiraDoCartao, CARTAO_VAZIO, DadosCartao, digits, EnrollmentData, fieldError, formatarBRL,
+  CARTAO_VAZIO, DadosCartao, digits, EnrollmentData, fieldError, formatarBRL,
   loadJson, maskCpf, maskPhone, PagamentoMetodo, PRECO_CENTAVOS, saveJson, STORAGE_KEYS,
 } from '@/lib/enrollment'
 import {
@@ -18,7 +18,7 @@ import {
 type Stage = 'dados' | 'pagamento' | 'confirmado'
 type Cadastro = { primeiroNome: string; telefoneFinal: string; jaPaga: boolean }
 
-const EMPTY: EnrollmentData = { name: '', phone: '', cpf: '', highSchool: false }
+const EMPTY: EnrollmentData = { name: '', phone: '', cpf: '', email: '', highSchool: false }
 const INTERVALO_POLLING = 4000
 
 export function EnrollmentFlow() {
@@ -166,11 +166,11 @@ export function EnrollmentFlow() {
   }
 
   /**
-   * [INTEGRAÇÃO] Cobrança no cartão.
+   * Cobrança no cartão.
    *
-   * O número do cartão NÃO sai daqui. Quando a Único entrar, o SDK dela
-   * tokeniza os dados no navegador e devolve um token; só ele, a bandeira e
-   * os últimos 4 dígitos seguem para a nossa API.
+   * A API da Únicopag recebe o número em claro, então ele vai daqui para a
+   * nossa rota e de lá para o provedor. Não é gravado em lugar nenhum: fica
+   * apenas neste estado em memória, que some ao recarregar a página.
    */
   const pagarComCartao = async (cartao: DadosCartao) => {
     setEnviando(true); setErroGeral('')
@@ -178,9 +178,12 @@ export function EnrollmentFlow() {
       const nova = await criarCobranca({
         metodo: 'cartao',
         parcelas: cartao.parcelas,
-        bandeira: bandeiraDoCartao(cartao.numero),
-        ultimos4: digits(cartao.numero).slice(-4),
-        token: 'token-simulado-ate-a-integracao',
+        cartao: {
+          numero: digits(cartao.numero),
+          nome: cartao.nome.trim(),
+          validade: cartao.validade,
+          cvv: cartao.cvv,
+        },
       })
       setCobranca(nova)
       // [SIMULAÇÃO] Sem provedor, a cobrança no cartão é dada como aprovada.
@@ -252,6 +255,7 @@ function DataStage({ data, errors, cadastro, enviando, erroGeral, update, blur, 
       <div className="field-group">
         <Field id="dados-nome" label="Nome completo" error={errors.name}><input id="dados-nome" type="text" autoComplete="name" value={data.name} onChange={e => update('name', e.target.value)} onBlur={() => blur('name')} onFocus={focus} aria-invalid={!!errors.name} /></Field>
         <Field id="dados-telefone" label="WhatsApp" error={errors.phone}><input id="dados-telefone" type="tel" inputMode="numeric" autoComplete="tel" placeholder="(00) 00000-0000" value={data.phone} onChange={e => update('phone', maskPhone(e.target.value))} onBlur={() => blur('phone')} onFocus={focus} aria-invalid={!!errors.phone} /></Field>
+        <Field id="dados-email" label="E-mail" error={errors.email}><input id="dados-email" type="email" inputMode="email" autoComplete="email" placeholder="voce@exemplo.com" value={data.email} onChange={e => update('email', e.target.value)} onBlur={() => blur('email')} onFocus={focus} aria-invalid={!!errors.email} /></Field>
         <Field id="dados-cpf" label="CPF" error={errors.cpf}><input id="dados-cpf" type="text" inputMode="numeric" autoComplete="off" placeholder="000.000.000-00" value={data.cpf} onChange={e => update('cpf', maskCpf(e.target.value))} onBlur={() => blur('cpf')} onFocus={focus} aria-invalid={!!errors.cpf} /></Field>
         <div className="field">
           <label className="checkbox-row"><input type="checkbox" checked={data.highSchool} onChange={e => update('highSchool', e.target.checked)} onBlur={() => blur('highSchool')} /><span>Concluí o Ensino Médio</span></label>

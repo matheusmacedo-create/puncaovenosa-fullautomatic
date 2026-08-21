@@ -7,7 +7,7 @@ import { EnrollmentData, loadJson, maskCpf, STORAGE_KEYS } from '@/lib/enrollmen
 import { buscarInscricao, Inscricao } from '@/lib/api-cliente'
 import { ServiceWorkerRegistration } from '@/components/service-worker-registration'
 
-const FALLBACK: EnrollmentData = { name: 'Aluno(a) CVB-RJ', phone: '', cpf: '000.000.000-00', highSchool: true }
+const FALLBACK: EnrollmentData = { name: 'Aluno(a) CVB-RJ', phone: '', cpf: '000.000.000-00', email: '', highSchool: true }
 
 const ROTULO_DE_STATUS: Record<Inscricao['status'], string> = {
   rascunho: 'Cadastro iniciado',

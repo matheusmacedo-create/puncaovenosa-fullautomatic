@@ -8,7 +8,7 @@ export const erro = (mensagem: string, status: number) => NextResponse.json({ er
  * Envolve um handler para que nenhuma exceção vaze detalhe de banco para o
  * cliente. Erros inesperados viram 500 genérico e vão para o log do servidor.
  */
-export function rota<T>(handler: () => Promise<NextResponse<T> | NextResponse<{ erro: string }>>) {
+export function rota(handler: () => Promise<NextResponse<unknown>>) {
   return handler().catch((e: unknown) => {
     if (e instanceof SupabaseNaoConfigurado || e instanceof SupabaseUrlInvalida) {
       console.error('[funil] configuração do Supabase:', e.message)

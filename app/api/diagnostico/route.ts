@@ -3,6 +3,8 @@ import { rota } from '@/lib/http'
 import { lerInscricaoId } from '@/lib/session'
 import { estadoDaSimulacao } from '@/lib/simulacao'
 import { supabaseServer } from '@/lib/supabase/server'
+import { siteUrl } from '@/lib/site-url'
+import { consultarSaldo, UnicopagErro } from '@/lib/unicopag'
 
 /**
  *Check-up da configuração, para diagnosticar um ambiente onde não dá para
@@ -40,6 +42,24 @@ function urlValida(valor: string | undefined) {
   } catch { return false }
 }
 
+/**
+ * Prova que a chave da Únicopag funciona, sem criar cobrança: consulta o
+ * saldo, que é somente leitura. Devolve apenas se respondeu, nunca o valor —
+ * o saldo da instituição não é informação para uma rota pública.
+ */
+async function estadoDoProvedor() {
+  if (!process.env.UNICO_API_KEY?.trim()) {
+    return { configurado: false, chaveValida: null as boolean | null, erro: null as string | null }
+  }
+  try {
+    await consultarSaldo()
+    return { configurado: true, chaveValida: true, erro: null }
+  } catch (e) {
+    const detalhe = e instanceof UnicopagErro ? `${e.status}: ${e.message}` : 'falha de rede'
+    return { configurado: true, chaveValida: false, erro: detalhe }
+  }
+}
+
 export function GET(request: Request) {
   return rota(async () => {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL
@@ -60,6 +80,8 @@ export function GET(request: Request) {
         tamanho: chave?.length ?? 0,
       },
       simulacao: estadoDaSimulacao(),
+      provedor: await estadoDoProvedor(),
+      siteUrl: siteUrl(),
       cookieDeSessao: (await lerInscricaoId()) ? 'presente' : 'ausente',
       recebeuCookies: !!request.headers.get('cookie'),
     }
