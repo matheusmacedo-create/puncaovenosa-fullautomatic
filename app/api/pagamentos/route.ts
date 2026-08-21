@@ -3,6 +3,7 @@ import {
   COMPOSICAO_PRECO, MAX_PARCELAS, MINUTOS_PARA_EXPIRAR, PIX_RECEBEDOR, PRECO_CENTAVOS,
 } from '@/lib/enrollment'
 import { gerarPixCopiaCola } from '@/lib/pix'
+import { simulacaoAtiva } from '@/lib/simulacao'
 import { corpo, erro, rota } from '@/lib/http'
 import { lerInscricaoId } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabase/server'
@@ -90,6 +91,7 @@ export function POST(request: Request) {
       pixCopiaCola: data.pix_copia_cola,
       criadoEm: data.criado_em,
       minutosParaExpirar: MINUTOS_PARA_EXPIRAR,
+      simulacao: simulacaoAtiva(),
     })
   })
 }

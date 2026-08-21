@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { erro, rota } from '@/lib/http'
 import { lerInscricaoId } from '@/lib/session'
-import { SIMULACAO_ATIVA } from '@/lib/simulacao'
+import { simulacaoAtiva } from '@/lib/simulacao'
 import { supabaseServer } from '@/lib/supabase/server'
 
 /**
@@ -42,7 +42,7 @@ function urlValida(valor: string | undefined) {
 
 export function GET(request: Request) {
   return rota(async () => {
-    if (!SIMULACAO_ATIVA) return erro('Diagnóstico desativado.', 403)
+    if (!simulacaoAtiva()) return erro('Diagnóstico desativado.', 403)
 
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL
     const chave = process.env.SUPABASE_SECRET_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -60,6 +60,11 @@ export function GET(request: Request) {
         tipo: analise.tipo,
         serve: analise.serve,
         tamanho: chave?.length ?? 0,
+      },
+      simulacao: {
+        ativa: simulacaoAtiva(),
+        origem: process.env.SIMULAR_PAGAMENTO ? 'SIMULAR_PAGAMENTO'
+          : process.env.NEXT_PUBLIC_SIMULAR_PAGAMENTO ? 'NEXT_PUBLIC_SIMULAR_PAGAMENTO' : null,
       },
       cookieDeSessao: (await lerInscricaoId()) ? 'presente' : 'ausente',
       recebeuCookies: !!request.headers.get('cookie'),

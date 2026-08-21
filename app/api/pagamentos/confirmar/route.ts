@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { corpo, erro, rota } from '@/lib/http'
 import { lerInscricaoId } from '@/lib/session'
-import { SIMULACAO_ATIVA } from '@/lib/simulacao'
+import { simulacaoAtiva } from '@/lib/simulacao'
 import { supabaseServer } from '@/lib/supabase/server'
 
 type Payload = { pagamentoId?: string }
@@ -20,7 +20,7 @@ type Payload = { pagamentoId?: string }
  */
 export function POST(request: Request) {
   return rota(async () => {
-    if (!SIMULACAO_ATIVA) {
+    if (!simulacaoAtiva()) {
       return erro('Confirmação manual desativada. O pagamento é confirmado pelo provedor.', 403)
     }
 

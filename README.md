@@ -95,7 +95,7 @@ As segundas opções são os nomes que a integração Supabase da Vercel injeta 
 1. Em vercel.com, **Add New → Project** e importar `puncaovenosa-fullautomatic`.
 2. A Vercel detecta Next.js e pnpm sozinha — não mexa em build command nem output directory.
 3. Em **Settings → Environment Variables**, conferir se a URL e a chave secreta do Supabase estão presentes (a integração costuma injetá-las). Se não estiverem, adicionar com qualquer um dos nomes da tabela acima.
-4. Para conseguir percorrer o funil sem provedor de pagamento, adicionar `NEXT_PUBLIC_SIMULAR_PAGAMENTO` com valor `true`. **Remova essa variável antes de receber aluno de verdade.**
+4. Para conseguir percorrer o funil sem provedor de pagamento, adicionar `SIMULAR_PAGAMENTO` com valor `true`. **Remova essa variável antes de receber aluno de verdade.**
 5. Deploy. Cada push na `main` gera um novo deploy, e cada pull request ganha uma URL de preview própria.
 
 ### Diagnóstico
@@ -108,7 +108,7 @@ As segundas opções são os nomes que a integração Supabase da Vercel injeta 
   "banco": { "leTabelas": true, "temFuncoes": true } }
 ```
 
-Ele nomeia os enganos mais comuns: URL inválida, o nome da variável colado no lugar do valor, e a chave **publicável** usada onde deveria estar a secreta. Esse último é traiçoeiro — a chave publicável não gera erro, o RLS apenas devolve lista vazia, então tudo parece funcionar e nada é gravado.
+Ele informa se a simulação está ativa e nomeia os enganos mais comuns: URL inválida, o nome da variável colado no lugar do valor, e a chave **publicável** usada onde deveria estar a secreta. Esse último é traiçoeiro — a chave publicável não gera erro, o RLS apenas devolve lista vazia, então tudo parece funcionar e nada é gravado.
 
 Nenhum segredo é devolvido: da chave, só o prefixo. A rota fica atrás da mesma variável da simulação, e responde `403` sem ela.
 
@@ -120,9 +120,11 @@ Nenhum segredo é devolvido: da chave, só o prefixo. A rota fica atrás da mesm
 
 ### Simulação de pagamento
 
-Enquanto o provedor não está integrado, `NEXT_PUBLIC_SIMULAR_PAGAMENTO=true` libera os botões de simulação na tela de pagamento e a rota `POST /api/pagamentos/confirmar`. É o que permite percorrer o funil inteiro num ambiente de teste.
+Enquanto o provedor não está integrado, `SIMULAR_PAGAMENTO=true` trata a cobrança como aprovada: copiar o código PIX ou pagar no cartão leva direto para a etapa seguinte. É o que permite percorrer o funil inteiro num ambiente de teste, e a tela exibe um aviso de modo de teste enquanto está ativa.
 
-**Não ligue em produção.** Com a variável ativa, qualquer visitante confirma a própria inscrição sem pagar. Com ela ausente, a rota responde `403` e só o webhook — que exige o token do provedor — confirma pagamento.
+É uma variável de **servidor**, lida a cada requisição e enviada ao navegador dentro da resposta da cobrança. Ligar ou desligar tem efeito imediato, **sem novo deploy** — ao contrário de uma `NEXT_PUBLIC_*`, que é embutida no bundle em tempo de build. O nome antigo `NEXT_PUBLIC_SIMULAR_PAGAMENTO` continua aceito, mas exige rebuild para valer.
+
+**Não ligue em produção.** Com a variável ativa, qualquer visitante conclui a inscrição sem pagar. Com ela ausente, `POST /api/pagamentos/confirmar` responde `403` e só o webhook — que exige o token do provedor — confirma pagamento.
 
 Outros comandos:
 

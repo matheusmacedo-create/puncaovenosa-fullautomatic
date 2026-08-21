@@ -6,7 +6,6 @@ import { Check, CreditCard, Loader2, QrCode, X } from 'lucide-react'
 import { ClinicalHeader, RedCross, VisualQr } from '@/components/clinical-header'
 import { CardForm } from '@/components/card-form'
 import { PriceBreakdown } from '@/components/price-breakdown'
-import { SIMULACAO_ATIVA } from '@/lib/simulacao'
 import {
   bandeiraDoCartao, DadosCartao, digits, EnrollmentData, fieldError, formatarBRL,
   loadJson, maskCpf, maskPhone, PagamentoMetodo, PRECO_CENTAVOS, saveJson, STORAGE_KEYS,
@@ -148,10 +147,19 @@ export function EnrollmentFlow() {
     catch (e) { setErroGeral(e instanceof ErroDaApi ? e.message : 'Não foi possível gerar novo código.') }
   }
 
+  /** Confirma a cobrança e leva para a etapa seguinte. */
+  const aprovar = useCallback(async (pagamentoId: string) => {
+    try { await confirmarCobranca(pagamentoId); go('confirmado') }
+    catch (e) { setErroGeral(e instanceof ErroDaApi ? e.message : 'Não foi possível confirmar o pagamento.') }
+  }, [go])
+
   const copyPix = async () => {
     if (!cobranca?.pixCopiaCola) return
     try { await navigator.clipboard.writeText(cobranca.pixCopiaCola) } catch { /* sem clipboard no preview */ }
     navigator.vibrate?.(35); setCopied(true); window.setTimeout(() => setCopied(false), 2000)
+    // [SIMULAÇÃO] Sem provedor, copiar o código é o gatilho de "já paguei".
+    // A pausa existe só para o aluno ver o aviso de copiado antes da troca de tela.
+    if (cobranca.simulacao) window.setTimeout(() => aprovar(cobranca.id), 1200)
   }
 
   /**
@@ -172,6 +180,8 @@ export function EnrollmentFlow() {
         token: 'token-simulado-ate-a-integracao',
       })
       setCobranca(nova)
+      // [SIMULAÇÃO] Sem provedor, a cobrança no cartão é dada como aprovada.
+      if (nova.simulacao) await aprovar(nova.id)
     } catch (e) {
       setErroGeral(e instanceof ErroDaApi ? e.message : 'Não foi possível processar o cartão.')
     } finally { setEnviando(false) }
@@ -180,7 +190,7 @@ export function EnrollmentFlow() {
   const simular = async (desfecho: 'pago' | 'expirado' | 'recusado') => {
     if (!cobranca) return
     try {
-      if (desfecho === 'pago') { await confirmarCobranca(cobranca.id); go('confirmado'); return }
+      if (desfecho === 'pago') { await aprovar(cobranca.id); return }
       await encerrarCobranca(cobranca.id, desfecho, desfecho === 'recusado' ? 'Simulação de recusa' : undefined)
       setCobranca(c => c && { ...c, status: desfecho })
     } catch (e) { setErroGeral(e instanceof ErroDaApi ? e.message : 'Falha na simulação.') }
@@ -279,6 +289,7 @@ function PaymentStage({ metodo, cobranca, copied, restante, enviando, erroGeral,
       <button role="tab" aria-selected={metodo === 'cartao'} className={`method-tab ${metodo === 'cartao' ? 'selected' : ''}`} onClick={() => trocarMetodo('cartao')}><CreditCard /> Cartão</button>
     </div>
 
+    {cobranca?.simulacao && <p className="simulation-banner" role="status">Modo de teste — o pagamento é aprovado automaticamente e nenhuma cobrança é feita.</p>}
     {erroGeral && <p className="error" role="alert">{erroGeral}</p>}
     {!cobranca && !erroGeral && <p className="payment-status"><Loader2 className="spin" /><span>Preparando o pagamento…</span></p>}
 
@@ -287,7 +298,7 @@ function PaymentStage({ metodo, cobranca, copied, restante, enviando, erroGeral,
       : cobranca && metodo === 'pix' ? <>
         <div className="payment-desktop-qr"><VisualQr /></div>
         <button className={`copy-button ${copied ? 'copied' : ''}`} onClick={copyPix}>{copied ? <><Check /> Código copiado</> : 'Copiar código PIX'}</button>
-        {copied && <p className="copy-help">Agora abra o app do seu banco, escolha PIX Copia e Cola e conclua o pagamento.</p>}
+        {copied && <p className="copy-help">{cobranca.simulacao ? 'Modo de teste — seguindo para a próxima etapa…' : 'Agora abra o app do seu banco, escolha PIX Copia e Cola e conclua o pagamento.'}</p>}
         <code className="pix-code">{cobranca.pixCopiaCola}</code>
         <details className="qr-disclosure"><summary>Ver QR Code para pagar em outro aparelho</summary><div className="qr-wrap"><VisualQr /></div></details>
         <p className={`timer ${restante !== null && restante <= 300 ? 'warning' : ''}`}>Este código expira em {timer}</p>
@@ -296,7 +307,7 @@ function PaymentStage({ metodo, cobranca, copied, restante, enviando, erroGeral,
       : cobranca && metodo === 'cartao' ? <CardForm enviando={enviando} onSubmit={pagarComCartao} />
       : null}
 
-    {cobranca && SIMULACAO_ATIVA && <div className="dev-tools">
+    {cobranca?.simulacao && <div className="dev-tools">
       <small>Simulação · não use em produção</small>
       <button onClick={() => simular('pago')}>Simular pagamento confirmado</button>
       <button onClick={() => simular('expirado')}>Simular expirado</button>
