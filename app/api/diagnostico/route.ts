@@ -112,6 +112,10 @@ export function GET(request: Request) {
     if (!config.provedor.configurado) pendencias.push('UNICO_API_KEY ausente — sem ela nenhuma cobrança é real.')
     else if (!config.provedor.chaveValida) pendencias.push('A chave da Únicopag foi recusada pela API.')
     if (config.simulacao.ativa) pendencias.push('Simulação ativa — as cobranças não são reais.')
+    // Combinação que trava o funil por inteiro e não é óbvia de enxergar.
+    if (!config.simulacao.ativa && !config.provedor.configurado) {
+      pendencias.push('SIMULAR_PAGAMENTO=false sem UNICO_API_KEY: ninguém consegue pagar. Remova a variável ou configure o provedor.')
+    }
     if (confirmacaoManualPermitida()) pendencias.push('PERMITIR_CONFIRMACAO_MANUAL ligada — qualquer visitante conclui a inscrição sem pagar.')
     if (!config.siteUrl) pendencias.push('NEXT_PUBLIC_SITE_URL ausente — a Únicopag precisa dela para avisar o pagamento.')
 
