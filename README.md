@@ -231,7 +231,14 @@ O postback da Únicopag **não é fonte da verdade**. A documentação não desc
 
 ### CEP na triagem
 
-O primeiro passo da triagem resolve o CEP de verdade, pela ViaCEP, e mostra o bairro e a cidade para o aluno confirmar antes de seguir. A consulta passa por `/api/cep/[cep]`, e não sai do navegador: é o padrão do projeto — quem fala com terceiro é o servidor —, mantém `connect-src 'self'` na CSP, evita expor o IP do aluno à ViaCEP e permite cachear (CEP não muda; um mês).
+O primeiro passo da triagem aceita **CEP ou endereço**. Digitando números, resolve o CEP pela ViaCEP e mostra o bairro e a cidade para o aluno confirmar. Digitando letras, vira busca por logradouro (`/ws/UF/Cidade/Rua/json/`) e lista as ruas encontradas — clicar numa delas preenche o CEP. Quem não sabe o próprio CEP é justamente quem trava num formulário; sem isso, restava mandar o aluno procurar em outro site no meio da inscrição.
+
+As duas consultas passam pelo servidor, por `/api/cep/[cep]` e `/api/enderecos`. É o padrão do projeto — quem fala com terceiro é o servidor —, mantém `connect-src 'self'` na CSP, evita expor o IP do aluno à ViaCEP e permite cachear (CEP não muda; um mês).
+
+A busca por rua tem duas particularidades da ViaCEP que o código trata:
+
+- **Ela casa pedaço de texto, não palavra.** Quem procura "Praça da Cruz Vermelha" não acha "Praça Cruz Vermelha", porque o "da" não está lá — e é assim que as pessoas falam o nome da rua. Quando a primeira busca volta vazia, há uma segunda sem as ligações (`da`, `de`, `do`, `das`, `dos`, `e`). É tentativa, e não regra: em "Avenida das Américas" a ligação faz parte do nome, e tirá-la de saída estragaria a busca que teria funcionado.
+- **UF, cidade e rua são obrigatórios**, com no mínimo três letras nas duas últimas. A UF e a cidade vêm preenchidas com RJ e Rio de Janeiro, que é de onde vem quase todo mundo num curso presencial na sede, e quem não é de lá troca.
 
 A resposta do passo 1 guarda `{ cep, bairro, cidade, uf }`, e não só o número, para a secretaria montar turma por região sem consultar CEP a CEP depois. Os leitores aceitam também a forma antiga, em texto puro: há rascunhos em `localStorage` de quem começou a triagem antes.
 

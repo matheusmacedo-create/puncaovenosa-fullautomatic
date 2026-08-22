@@ -111,3 +111,8 @@ export const salvarResposta = (passo: number, resposta: unknown) =>
 
 export const buscarEnderecoDoCep = (cepEmDigitos: string) =>
   pedir<Endereco>(`/api/cep/${cepEmDigitos}`)
+
+export const pesquisarEnderecos = (uf: string, cidade: string, logradouro: string) =>
+  pedir<{ enderecos: Endereco[]; total: number }>(
+    `/api/enderecos?uf=${encodeURIComponent(uf)}&cidade=${encodeURIComponent(cidade)}&logradouro=${encodeURIComponent(logradouro)}`,
+  )
