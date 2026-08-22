@@ -3,6 +3,7 @@ import { erro, rota } from '@/lib/http'
 import { lerInscricaoId } from '@/lib/session'
 import { confirmacaoManualPermitida, simulacaoAtiva } from '@/lib/simulacao'
 import { traduzirStatus } from '@/lib/pagamento-status'
+import { espelharNaPlanilha } from '@/lib/planilha'
 import { consultarTransacao } from '@/lib/unicopag'
 import { supabaseServer } from '@/lib/supabase/server'
 import { MINUTOS_PARA_EXPIRAR, PRECO_CENTAVOS } from '@/lib/enrollment'
@@ -71,6 +72,9 @@ export function GET() {
           await supabaseServer().from('pagamentos').update({ status: noProvedor }).eq('id', data.id).eq('status', 'pendente')
           status = noProvedor
         }
+        // Esta rota é consultada em intervalos, então só espelha quando o
+        // status realmente mudou — senão a planilha seria reescrita a cada 10s.
+        if (status !== data.status) espelharNaPlanilha(inscricaoId)
       } catch (e) {
         // Provedor fora do ar não pode derrubar a tela: seguimos com o que o
         // banco sabe, e a próxima consulta tenta de novo.

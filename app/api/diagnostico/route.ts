@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { rota } from '@/lib/http'
 import { formatarBRL, PRECO_CENTAVOS, PRECO_DE_TESTE } from '@/lib/enrollment'
+import { planilhaConfigurada } from '@/lib/planilha'
 import { lerInscricaoId } from '@/lib/session'
 import { confirmacaoManualPermitida, estadoDaSimulacao } from '@/lib/simulacao'
 import { supabaseServer } from '@/lib/supabase/server'
@@ -112,6 +113,8 @@ export function GET(request: Request) {
       provedor: await estadoDoProvedor(),
       siteUrl: siteUrl(),
       postback: await estadoDoPostback(),
+      // Opcional: sem ela o funil funciona igual, só não espelha na planilha.
+      planilha: { configurada: planilhaConfigurada() },
       preco: {
         centavos: PRECO_CENTAVOS,
         exibido: formatarBRL(PRECO_CENTAVOS),
