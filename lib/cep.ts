@@ -80,6 +80,9 @@ export async function buscarEndereco(cepEmDigitos: string): Promise<Endereco> {
     signal: AbortSignal.timeout(5_000),
   })
 
+  // 400 é formato inválido, não indisponibilidade — o guarda acima já deveria
+  // ter barrado, mas se passar, é erro de quem digitou, não da ViaCEP.
+  if (resposta.status === 400) throw new CepNaoEncontrado()
   if (!resposta.ok) throw new Error(`ViaCEP respondeu ${resposta.status}`)
 
   const dados = (await resposta.json()) as RespostaViaCep
@@ -93,4 +96,76 @@ export async function buscarEndereco(cepEmDigitos: string): Promise<Endereco> {
     cidade: dados.localidade || null,
     uf: dados.uf || null,
   }
+}
+
+/**
+ * Pesquisa de CEP pelo endereço, para quem não sabe o próprio CEP.
+ *
+ * A ViaCEP exige UF, cidade e logradouro, com no mínimo três caracteres nos
+ * dois últimos — menos que isso devolve 400, e devolveria meia cidade. O
+ * limite dela é 50 resultados, ordenados por proximidade do nome.
+ */
+export const MINIMO_PARA_PESQUISAR = 3
+
+export class PesquisaCurtaDemais extends Error {
+  constructor() {
+    super(`Cidade e rua precisam de pelo menos ${MINIMO_PARA_PESQUISAR} letras.`)
+    this.name = 'PesquisaCurtaDemais'
+  }
+}
+
+export function pesquisaValida(uf: string, cidade: string, logradouro: string) {
+  return /^[A-Za-z]{2}$/.test(uf.trim())
+    && cidade.trim().length >= MINIMO_PARA_PESQUISAR
+    && logradouro.trim().length >= MINIMO_PARA_PESQUISAR
+}
+
+async function consultarPorEndereco(uf: string, cidade: string, logradouro: string): Promise<Endereco[]> {
+  const caminho = [uf, cidade, logradouro].map(p => encodeURIComponent(p.trim())).join('/')
+  const resposta = await fetch(`https://viacep.com.br/ws/${caminho}/json/`, {
+    next: { revalidate: 60 * 60 * 24 * 30 },
+    signal: AbortSignal.timeout(6_000),
+  })
+
+  if (resposta.status === 400) throw new PesquisaCurtaDemais()
+  if (!resposta.ok) throw new Error(`ViaCEP respondeu ${resposta.status}`)
+
+  const dados = await resposta.json()
+  // Cidade inexistente devolve um objeto com `erro` em vez de uma lista.
+  if (!Array.isArray(dados)) return []
+
+  return (dados as RespostaViaCep[])
+    .filter(d => d.cep)
+    .map(d => ({
+      cep: d.cep!,
+      logradouro: d.logradouro || null,
+      bairro: d.bairro || null,
+      cidade: d.localidade || null,
+      uf: d.uf || null,
+    }))
+}
+
+const LIGACOES = /\b(?:da|de|do|das|dos|e)\b/gi
+
+const semLigacoes = (texto: string) => texto.replace(LIGACOES, ' ').replace(/\s+/g, ' ').trim()
+
+export async function pesquisarEnderecos(uf: string, cidade: string, logradouro: string): Promise<Endereco[]> {
+  if (!pesquisaValida(uf, cidade, logradouro)) throw new PesquisaCurtaDemais()
+
+  const encontrados = await consultarPorEndereco(uf, cidade, logradouro)
+  if (encontrados.length) return encontrados
+
+  /*
+   * A ViaCEP casa pedaço de texto, não palavra: quem procura "Praça da Cruz
+   * Vermelha" não acha "Praça Cruz Vermelha", porque o "da" não está lá. Só
+   * que é assim que as pessoas falam o nome da rua.
+   *
+   * A segunda tentativa tira as ligações. É tentativa, e não regra, porque
+   * há rua em que a ligação faz parte do nome — "Avenida das Américas" —, e
+   * tirá-la de saída estragaria a busca que teria funcionado.
+   */
+  const enxuto = semLigacoes(logradouro)
+  if (enxuto === logradouro.trim() || enxuto.length < MINIMO_PARA_PESQUISAR) return []
+
+  return consultarPorEndereco(uf, cidade, enxuto)
 }
