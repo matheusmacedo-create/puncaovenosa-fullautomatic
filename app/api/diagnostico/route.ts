@@ -83,7 +83,12 @@ export function GET(request: Request) {
       simulacao: estadoDaSimulacao(),
       provedor: await estadoDoProvedor(),
       siteUrl: siteUrl(),
-      preco: { centavos: PRECO_CENTAVOS, exibido: formatarBRL(PRECO_CENTAVOS), deTeste: PRECO_DE_TESTE },
+      preco: {
+        centavos: PRECO_CENTAVOS,
+        exibido: formatarBRL(PRECO_CENTAVOS),
+        deTeste: PRECO_DE_TESTE,
+        variavelTesteDisponivelNoRuntime: Boolean(process.env.NEXT_PUBLIC_PRECO_TESTE_CENTAVOS),
+      },
       cookieDeSessao: (await lerInscricaoId()) ? 'presente' : 'ausente',
       recebeuCookies: !!request.headers.get('cookie'),
     }
@@ -120,6 +125,9 @@ export function GET(request: Request) {
     }
     if (confirmacaoManualPermitida()) pendencias.push('PERMITIR_CONFIRMACAO_MANUAL ligada — qualquer visitante conclui a inscrição sem pagar.')
     if (!config.siteUrl) pendencias.push('NEXT_PUBLIC_SITE_URL ausente — a Únicopag precisa dela para avisar o pagamento.')
+    if (!config.preco.variavelTesteDisponivelNoRuntime && process.env.NODE_ENV !== 'test') {
+      pendencias.push('NEXT_PUBLIC_PRECO_TESTE_CENTAVOS não chegou ao runtime — recrie como Non-sensitive e faça redeploy; se for teste, confirme preco: 10.')
+    }
     if (PRECO_DE_TESTE) pendencias.push(`Preço de teste em uso (${formatarBRL(PRECO_CENTAVOS)}) — remova NEXT_PUBLIC_PRECO_TESTE_CENTAVOS antes de vender.`)
 
     return NextResponse.json({
