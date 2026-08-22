@@ -4,7 +4,7 @@ import { formatarBRL, PRECO_CENTAVOS, PRECO_DE_TESTE } from '@/lib/enrollment'
 import { lerInscricaoId } from '@/lib/session'
 import { confirmacaoManualPermitida, estadoDaSimulacao } from '@/lib/simulacao'
 import { supabaseServer } from '@/lib/supabase/server'
-import { siteUrl } from '@/lib/site-url'
+import { siteUrl, urlDoWebhook } from '@/lib/site-url'
 import { consultarSaldo, UnicopagErro } from '@/lib/unicopag'
 
 /**
@@ -61,6 +61,34 @@ async function estadoDoProvedor() {
   }
 }
 
+/**
+ * Prova que o endereço do postback é alcançável de fora.
+ *
+ * A Únicopag avisa o pagamento fazendo uma requisição a esta aplicação, sem
+ * cookie e sem sessão. Se a URL cair atrás da Deployment Protection da Vercel,
+ * ela responde 401 ou redireciona para o SSO, e o aviso nunca chega — o aluno
+ * paga e a tela fica girando. É uma falha silenciosa: tudo o mais parece certo.
+ *
+ * Acontece quando `siteUrl()` cai no endereço específico do deployment, que é
+ * protegido, em vez do domínio estável do projeto, que não é.
+ */
+async function estadoDoPostback() {
+  let endereco: string
+  try { endereco = urlDoWebhook() } catch { return { url: null, alcancavel: false, motivo: 'endereço não definido' } }
+
+  try {
+    const resposta = await fetch(endereco, { method: 'GET', redirect: 'manual' })
+    // A rota só aceita POST, então 405 é a resposta saudável. 200 também serve.
+    if (resposta.status === 405 || resposta.status === 200) return { url: endereco, alcancavel: true, motivo: null }
+    if (resposta.status === 401 || (resposta.status >= 300 && resposta.status < 400)) {
+      return { url: endereco, alcancavel: false, motivo: 'protegido por autenticação da Vercel' }
+    }
+    return { url: endereco, alcancavel: false, motivo: `respondeu ${resposta.status}` }
+  } catch {
+    return { url: endereco, alcancavel: false, motivo: 'não respondeu' }
+  }
+}
+
 export function GET(request: Request) {
   return rota(async () => {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL
@@ -83,6 +111,7 @@ export function GET(request: Request) {
       simulacao: estadoDaSimulacao(),
       provedor: await estadoDoProvedor(),
       siteUrl: siteUrl(),
+      postback: await estadoDoPostback(),
       preco: {
         centavos: PRECO_CENTAVOS,
         exibido: formatarBRL(PRECO_CENTAVOS),
@@ -163,6 +192,13 @@ export function GET(request: Request) {
     }
     if (confirmacaoManualPermitida()) bloqueios.push('PERMITIR_CONFIRMACAO_MANUAL ligada — qualquer visitante conclui a inscrição sem pagar.')
     if (!config.siteUrl) bloqueios.push('NEXT_PUBLIC_SITE_URL ausente — a Únicopag precisa dela para avisar o pagamento.')
+    else if (!config.postback.alcancavel) {
+      bloqueios.push(
+        `A Únicopag não consegue avisar o pagamento: ${config.postback.url} está ${config.postback.motivo}. ` +
+        'Defina NEXT_PUBLIC_SITE_URL com o domínio estável do projeto — o endereço específico do deployment ' +
+        'fica atrás da Deployment Protection e recusa o postback.',
+      )
+    }
 
     if (precoDivergente) bloqueios.push(precoDivergente)
 
