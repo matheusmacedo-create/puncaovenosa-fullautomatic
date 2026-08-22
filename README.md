@@ -229,7 +229,17 @@ A confirmação tem **dois caminhos independentes**, porque depender só do post
 
 O postback da Únicopag **não é fonte da verdade**. A documentação não descreve assinatura, então qualquer um que descobrisse a URL poderia forjar um "pago". O que chega serve apenas de gatilho: o `hash` é usado para consultar `GET /public/v1/transactions/:hash`, e é essa resposta que decide. Verificado na prática — um postback forjado dizendo `paid` não confirma a inscrição.
 
-### Planilha da secretaria
+### Painel da secretaria
+
+`/secretaria` mostra ao vivo o que está passando pelo funil: quem entrou, quem pagou, e as respostas de triagem que definem a turma (CEP, perfil, turno, dias, urgência, origem). Lê direto do banco, que já é a fonte da verdade — não há cópia para sincronizar nem exportação para agendar.
+
+Ligado por `SECRETARIA_SENHA`. Sem ela a rota responde **404**: um deploy que não pediu pelo painel não tem painel para invadir. A senha precisa ter no mínimo 16 caracteres, e o painel não liga com menos — não há como limitar tentativas numa página exposta na internet sem um lugar para contá-las, então a defesa possível é exigir que ela seja longa.
+
+O formulário de entrada é `method="post"` puro, sem JavaScript: a secretaria pode estar num computador antigo, e uma tela de acompanhamento não deveria depender de bundle. O cookie de sessão (`cvb_secretaria`, httpOnly, 8 horas) guarda o hash da senha, não a senha.
+
+A página lista nome, CPF e telefone de alunos reais. A senha é da secretaria, não de divulgação.
+
+### Planilha da secretaria (alternativa)
 
 Ponte provisória, ligada por `PLANILHA_URL` e `PLANILHA_TOKEN`. Sem as duas variáveis, o espelhamento não acontece e o funil funciona igual. Serve para a secretaria enxergar o que está sendo coletado antes de existir integração com os sistemas dela.
 

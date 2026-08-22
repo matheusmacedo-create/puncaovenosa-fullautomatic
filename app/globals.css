@@ -303,3 +303,42 @@ h1,h2,h3,h4 { font-family: var(--font-archivo), sans-serif; letter-spacing: -.01
 @media (max-width: 380px) { .validacao-dados { grid-template-columns: 1fr; } }
 
 .preco-de-teste { grid-column: 1 / -1; color: var(--cvb-red); font-size: 12px; font-weight: 650; margin: 10px 0 0; padding-top: 10px; border-top: 1px dashed var(--cvb-red); }
+
+/* Painel da secretaria ---------------------------------------------------- */
+.secretaria-page { min-height: 100dvh; background: var(--paper); padding: 22px clamp(14px, 3vw, 32px) 60px; }
+.secretaria-page > header { display: flex; align-items: center; gap: 11px; margin-bottom: 22px; }
+.secretaria-page > header > span { font: 700 12px/1.1 var(--font-archivo); text-transform: uppercase; letter-spacing: .055em; }
+.secretaria-page > header > form { margin-left: auto; }
+
+.secretaria-entrada { width: min(100%, 380px); margin: 8vh auto 0; border: 1px solid var(--rule); background: var(--card); padding: 28px; display: flex; flex-direction: column; gap: 10px; }
+.secretaria-entrada h1 { font-size: 26px; margin-bottom: 2px; }
+.secretaria-entrada p { color: var(--ink-soft); font-size: 14px; margin-bottom: 12px; }
+.secretaria-entrada label { font-size: 13px; font-weight: 650; }
+.secretaria-entrada input { min-height: 50px; padding: 12px 14px; border: 1px solid var(--rule); border-radius: 3px; background: var(--card); }
+.secretaria-entrada .primary-button { margin-top: 8px; }
+.secretaria-erro { color: var(--cvb-red); font-size: 13px; font-weight: 650; margin: 0; }
+
+.secretaria-resumo { display: flex; flex-wrap: wrap; gap: 0; border: 1px solid var(--rule); background: var(--card); margin-bottom: 18px; }
+.secretaria-resumo > div { flex: 1; min-width: 120px; padding: 14px 18px; display: flex; flex-direction: column; gap: 2px; }
+.secretaria-resumo > div + div { border-left: 1px solid var(--rule); }
+.secretaria-resumo strong { font: 700 26px/1 var(--font-archivo); }
+.secretaria-resumo span { font-size: 12px; color: var(--ink-soft); text-transform: uppercase; letter-spacing: .05em; }
+
+.secretaria-vazio { color: var(--ink-soft); background: var(--card); border: 1px solid var(--rule); padding: 28px; text-align: center; }
+
+/* A tabela é larga de propósito: rola dentro da própria caixa, e a página
+   nunca rola de lado. */
+.secretaria-tabela-rolagem { overflow-x: auto; border: 1px solid var(--rule); background: var(--card); }
+.secretaria-tabela { border-collapse: collapse; width: 100%; font-size: 13px; }
+.secretaria-tabela th, .secretaria-tabela td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--rule); vertical-align: top; white-space: nowrap; }
+.secretaria-tabela th { font: 700 11px var(--font-mono); text-transform: uppercase; letter-spacing: .06em; color: var(--ink-soft); background: #f6f5f2; position: sticky; top: 0; }
+.secretaria-tabela tbody tr.paga { background: color-mix(in srgb, var(--ok) 5%, transparent); }
+.secretaria-tabela strong { font-weight: 650; }
+.secretaria-sub { display: block; color: var(--ink-soft); font-size: 12px; margin-top: 2px; }
+.secretaria-quando { font-family: var(--font-mono); font-size: 12px; color: var(--ink-soft); }
+.secretaria-triagem { max-width: 200px; white-space: normal; }
+.secretaria-selo { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+.secretaria-selo.ok { background: color-mix(in srgb, var(--ok) 14%, transparent); color: var(--ok); }
+.secretaria-selo.espera { background: color-mix(in srgb, var(--warn) 14%, transparent); color: var(--warn); }
+
+.secretaria-rodape { margin-top: 16px; color: var(--ink-soft); font-size: 12px; max-width: 680px; }
