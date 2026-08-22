@@ -2,28 +2,49 @@
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
 
+/*
+ * Duas linguagens de estilo convivem aqui, de propósito.
+ *
+ * A landing (`/`) foi escrita em utilitários do Tailwind e lê os tokens
+ * shadcn (--background, --primary, --radius). O funil (`/inscricao` e
+ * adiante) foi escrito em classes semânticas e lê os tokens crus
+ * (--paper, --ink, --cvb-red, --rule). Os tokens shadcn são derivados dos
+ * crus: a paleta institucional é uma só, escrita num lugar só.
+ */
 @theme inline {
   --font-sans: var(--font-inter);
   --font-heading: var(--font-archivo);
+  --font-display: var(--font-archivo);
   --font-mono: var(--font-mono);
-  --color-background: var(--paper);
-  --color-foreground: var(--ink);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
   --color-card: var(--card);
-  --color-card-foreground: var(--ink);
-  --color-primary: var(--cvb-red);
-  --color-primary-foreground: var(--card);
-  --color-muted: #f3f2ef;
-  --color-muted-foreground: var(--ink-soft);
-  --color-border: var(--rule);
-  --color-input: var(--rule);
-  --color-ring: var(--cvb-red);
-  --radius-sm: 2px;
-  --radius-md: 3px;
-  --radius-lg: 4px;
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
 }
 
 :root {
   color-scheme: light;
+
+  /* Paleta institucional. As classes semânticas do funil leem estes. */
   --cvb-red: #c8102e;
   --ink: #16181c;
   --ink-soft: #5a6068;
@@ -32,19 +53,32 @@
   --rule: #e3e1dc;
   --ok: #1e7a4a;
   --warn: #a8601a;
-  --background: var(--paper);
+
+  /* Os mesmos tons, no vocabulário que os utilitários do Tailwind esperam. */
+  --background: var(--card);
   --foreground: var(--ink);
+  --card-foreground: var(--ink);
+  --popover: var(--card);
+  --popover-foreground: var(--ink);
   --primary: var(--cvb-red);
   --primary-foreground: var(--card);
+  --secondary: #f6f5f2;
+  --secondary-foreground: var(--ink);
+  --muted: #f3f2ef;
+  --muted-foreground: var(--ink-soft);
+  --accent: #f6f5f2;
+  --accent-foreground: var(--ink);
+  --destructive: var(--cvb-red);
   --border: var(--rule);
   --input: var(--rule);
   --ring: var(--cvb-red);
-  --radius: 4px;
+  --radius: 6px;
 }
 
 * { box-sizing: border-box; border-color: var(--rule); }
-html { background: var(--paper); }
-body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--font-inter), sans-serif; line-height: 1.5; }
+/* A landing assenta no branco; as telas do funil pintam o próprio fundo. */
+html { background: var(--background); }
+body { margin: 0; background: var(--background); color: var(--ink); font-family: var(--font-inter), sans-serif; line-height: 1.5; }
 button, input { font: inherit; }
 button, a, input[type='checkbox'] { touch-action: manipulation; }
 button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid color-mix(in srgb, var(--cvb-red) 35%, transparent); outline-offset: 2px; }
@@ -58,7 +92,10 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid 
 .launcher-card { width: min(100%, 680px); border: 1px solid var(--rule); background: var(--card); padding: clamp(24px, 6vw, 56px); }
 .eyebrow { margin: 0 0 18px; color: var(--cvb-red); font: 700 12px/1.2 var(--font-mono); letter-spacing: .1em; text-transform: uppercase; }
 h1,h2,h3,p { margin-top: 0; }
-h1,h2,h3 { font-family: var(--font-archivo), sans-serif; line-height: 1.08; letter-spacing: -.025em; }
+h1,h2,h3,h4 { font-family: var(--font-archivo), sans-serif; letter-spacing: -.015em; }
+/* O funil aperta bem mais o título que a landing, que ajusta o seu por utilitário. */
+.launcher :is(h1,h2,h3), .sheet :is(h1,h2,h3), .triage-shell :is(h1,h2,h3),
+.pass-page :is(h1,h2,h3), .validacao-page :is(h1,h2,h3) { line-height: 1.08; letter-spacing: -.025em; }
 .launcher-card h1 { max-width: 580px; font-size: clamp(38px, 7vw, 64px); margin-bottom: 20px; }
 .lede { color: var(--ink-soft); font-size: 17px; max-width: 520px; margin-bottom: 32px; }
 .course-meta { display: flex; flex-wrap: wrap; gap: 0; border-block: 1px solid var(--rule); margin-bottom: 28px; }
@@ -87,6 +124,18 @@ h1,h2,h3 { font-family: var(--font-archivo), sans-serif; line-height: 1.08; lett
 .icon-button svg { width: 20px; }
 .sheet-close { position: absolute; top: 7px; right: 8px; z-index: 2; }
 .sheet .clinical-header { padding-right: 58px; }
+
+/*
+ * Dentro da gaveta da landing a moldura já é de fora: aqui a folha vira o
+ * quadro inteiro, sem página por trás, sem alça e sem um segundo botão de
+ * fechar — quem fecha é o "X" da gaveta.
+ */
+[data-embutido] .launcher, [data-embutido] .overlay, [data-embutido] .drag-handle { display: none; }
+[data-embutido] .sheet { inset: 0; width: auto; height: auto; border-radius: 0; box-shadow: none; animation: none; }
+[data-embutido] .sheet-close { display: none; }
+[data-embutido] .sheet .clinical-header { padding: 10px 18px; }
+/* Só no estreito o "X" da gaveta cai dentro do quadro; no largo ele fica de fora, à esquerda. */
+@media (max-width: 767px) { [data-embutido] .sheet .clinical-header { padding-left: 56px; } }
 .sheet-scroll { overflow-y: auto; flex: 1; padding: 28px 28px 120px; overscroll-behavior: contain; }
 .sheet-scroll h2 { font-size: 34px; margin-bottom: 8px; }
 .subtitle { color: var(--ink-soft); font-size: 14px; margin-bottom: 28px; }

@@ -9,7 +9,8 @@ import { CardForm } from '@/components/card-form'
 import { PriceBreakdown } from '@/components/price-breakdown'
 import {
   CARTAO_VAZIO, DadosCartao, digits, EnrollmentData, fieldError, formatarBRL,
-  loadJson, maskCpf, maskPhone, PagamentoMetodo, PRECO_CENTAVOS, saveJson, STORAGE_KEYS,
+  loadJson, maskCpf, maskPhone, MENSAGEM_FECHAR_CHECKOUT, PagamentoMetodo, PRECO_CENTAVOS,
+  ROTA_INSCRICAO, saveJson, STORAGE_KEYS,
 } from '@/lib/enrollment'
 import {
   buscarCobranca, Cobranca, confirmarCobranca, consultarCpf, criarCobranca, encerrarCobranca,
@@ -56,8 +57,17 @@ export function EnrollmentFlow() {
     return () => window.clearInterval(id)
   }, [])
 
-  const go = useCallback((next: Stage) => router.push(`/?etapa=${next}`), [router])
-  const close = () => router.push('/')
+  const go = useCallback((next: Stage) => router.push(`${ROTA_INSCRICAO}?etapa=${next}`), [router])
+
+  // Aberto pela gaveta da landing, fechar é fechar a gaveta — quem navega é
+  // a página de fora. Aberto direto em `/inscricao`, volta para a landing.
+  const close = () => {
+    if (window.self !== window.top) {
+      window.parent.postMessage(MENSAGEM_FECHAR_CHECKOUT, window.location.origin)
+      return
+    }
+    router.push('/')
+  }
 
   const update = <K extends keyof EnrollmentData>(key: K, value: EnrollmentData[K]) => {
     const next = { ...data, [key]: value }

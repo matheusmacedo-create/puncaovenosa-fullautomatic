@@ -15,6 +15,20 @@ export const STORAGE_KEYS = {
 } as const
 
 /**
+ * Onde o funil mora. A raiz é da landing page: o checkout saiu de `/` quando
+ * as duas partes viraram um app só. Fica aqui, e não escrito solto em cada
+ * `router.push`, porque uma rota esquecida joga o aluno para fora da compra.
+ */
+export const ROTA_INSCRICAO = '/inscricao'
+
+/**
+ * Aviso que o funil manda ao abrir dentro da gaveta da landing: fechar ali
+ * é fechar a gaveta, não navegar. Sem isso o botão de fechar carregaria a
+ * landing inteira dentro do próprio iframe.
+ */
+export const MENSAGEM_FECHAR_CHECKOUT = 'cvb:fechar-checkout'
+
+/**
  * Recebedor do PIX.
  *
  * [INTEGRAÇÃO] `chave` é um placeholder. Antes de ir ao ar, troque pela
