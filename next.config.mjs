@@ -3,6 +3,22 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  /*
+   * Carimba, no build, se o preço de teste estava definido.
+   *
+   * O navegador recebe `NEXT_PUBLIC_PRECO_TESTE_CENTAVOS` embutida no bundle,
+   * congelada no momento do build; o servidor lê a mesma variável do ambiente
+   * a cada requisição. Quando as duas discordam — variável marcada como
+   * Sensitive na Vercel, que não existe durante o build, ou removida sem novo
+   * deploy — a página anuncia um preço e a Únicopag cobra outro.
+   *
+   * Só o servidor consegue comparar os dois lados, e para isso precisa de um
+   * valor que venha do build. `env` é resolvida aqui, em build, e é isso que
+   * faz este carimbo funcionar onde uma leitura direta não funcionaria.
+   */
+  env: {
+    PRECO_TESTE_CENTAVOS_NO_BUILD: process.env.NEXT_PUBLIC_PRECO_TESTE_CENTAVOS ?? '',
+  },
   images: {
     unoptimized: true,
   },

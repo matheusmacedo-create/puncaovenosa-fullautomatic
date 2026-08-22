@@ -83,24 +83,51 @@ export function GET(request: Request) {
       simulacao: estadoDaSimulacao(),
       provedor: await estadoDoProvedor(),
       siteUrl: siteUrl(),
-      preco: { centavos: PRECO_CENTAVOS, exibido: formatarBRL(PRECO_CENTAVOS), deTeste: PRECO_DE_TESTE },
+      preco: {
+        centavos: PRECO_CENTAVOS,
+        exibido: formatarBRL(PRECO_CENTAVOS),
+        deTeste: PRECO_DE_TESTE,
+        // O que a cobrança usa: lido do ambiente a cada requisição.
+        variavelTesteDisponivelNoRuntime: Boolean(process.env.NEXT_PUBLIC_PRECO_TESTE_CENTAVOS),
+        // O que a tela usa: congelado no bundle do navegador pelo build.
+        variavelTesteDisponivelNoBuild: Boolean(process.env.PRECO_TESTE_CENTAVOS_NO_BUILD),
+      },
       cookieDeSessao: (await lerInscricaoId()) ? 'presente' : 'ausente',
       recebeuCookies: !!request.headers.get('cookie'),
     }
+
+    /*
+     * Tela e cobrança discordando sobre o preço — o pior estado possível.
+     *
+     * O navegador usa o valor congelado no build; a cobrança usa o valor lido
+     * do ambiente agora. Quando os dois discordam, a página anuncia um preço e
+     * a Únicopag cobra outro. Vale para vender e para testar: nos dois casos
+     * alguém paga um valor que não foi o combinado.
+     *
+     * Fica antes da checagem de banco porque não depende dela — e é justamente
+     * num ambiente meio configurado que se quer enxergar isso.
+     */
+    const precoDivergente =
+      config.preco.variavelTesteDisponivelNoBuild === config.preco.variavelTesteDisponivelNoRuntime
+        ? null
+        : config.preco.variavelTesteDisponivelNoRuntime
+          ? 'NEXT_PUBLIC_PRECO_TESTE_CENTAVOS existe no ambiente mas não entrou no build: a tela mostra o preço real e a cobrança sai reduzida. Na Vercel isso é variável marcada como Sensitive — recrie como Non-sensitive e refaça o deploy.'
+          : 'NEXT_PUBLIC_PRECO_TESTE_CENTAVOS entrou no build mas não está mais no ambiente: a tela mostra o preço reduzido e a cobrança sai cheia. Refaça o deploy.'
 
     // Sem configuração válida não adianta tentar falar com o banco. Os
     // veredictos vão junto mesmo assim: quem consulta esta rota está
     // perguntando "posso cobrar?", e omitir a resposta é pior que dá-la
     // negativa — some justamente no caso em que algo está errado.
     if (!config.url.valida || !analise.serve) {
-      const impedimento = 'Supabase mal configurado: sem banco não há inscrição para cobrar.'
+      const impedimentos = ['Supabase mal configurado: sem banco não há inscrição para cobrar.']
+      if (precoDivergente) impedimentos.push(precoDivergente)
       return NextResponse.json({
         ok: false,
         etapa: 'configuração',
         prontoParaVender: false,
-        pendencias: [impedimento],
+        pendencias: impedimentos,
         prontoParaTesteOperacional: false,
-        pendenciasDoTeste: [impedimento],
+        pendenciasDoTeste: impedimentos,
         config,
       }, { status: 200 })
     }
@@ -137,26 +164,17 @@ export function GET(request: Request) {
     if (confirmacaoManualPermitida()) bloqueios.push('PERMITIR_CONFIRMACAO_MANUAL ligada — qualquer visitante conclui a inscrição sem pagar.')
     if (!config.siteUrl) bloqueios.push('NEXT_PUBLIC_SITE_URL ausente — a Únicopag precisa dela para avisar o pagamento.')
 
+    if (precoDivergente) bloqueios.push(precoDivergente)
+
     // Vender exige, além do resto, que o preço em vigor seja o do curso.
     const pendencias = [...bloqueios]
     if (PRECO_DE_TESTE) pendencias.push(`Preço de teste em uso (${formatarBRL(PRECO_CENTAVOS)}) — remova NEXT_PUBLIC_PRECO_TESTE_CENTAVOS antes de vender.`)
 
-    /*
-     * O teste operacional exige o contrário: pagar de verdade, mas centavos.
-     *
-     * A dica sobre "Sensitive" não é hipotética. `NEXT_PUBLIC_` é resolvida
-     * no build, e variável marcada como Sensitive na Vercel não fica
-     * disponível ali — o valor vira `undefined` e o preço volta calado para
-     * R$ 249, com a variável aparecendo como definida no painel.
-     */
+    // O teste operacional exige o contrário: pagar de verdade, mas centavos.
+    // O caso em que a variável existe só num dos lados já saiu nos bloqueios.
     const pendenciasDoTeste = [...bloqueios]
-    if (!PRECO_DE_TESTE) {
-      pendenciasDoTeste.push(
-        'NEXT_PUBLIC_PRECO_TESTE_CENTAVOS não chegou ao build — o preço em vigor é o real. ' +
-        'Se você já a definiu na Vercel, confira se ficou marcada como Sensitive: variável Sensitive ' +
-        'não é exposta no build, e é no build que NEXT_PUBLIC_ é resolvida. Recrie como Non-sensitive ' +
-        'em Production, Preview e Development, e refaça o deploy.',
-      )
+    if (!config.preco.variavelTesteDisponivelNoRuntime && !config.preco.variavelTesteDisponivelNoBuild) {
+      pendenciasDoTeste.push('NEXT_PUBLIC_PRECO_TESTE_CENTAVOS não está definida — o preço em vigor é o real, de verdade.')
     }
 
     return NextResponse.json({
