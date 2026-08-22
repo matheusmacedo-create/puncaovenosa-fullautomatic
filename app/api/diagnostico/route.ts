@@ -88,9 +88,21 @@ export function GET(request: Request) {
       recebeuCookies: !!request.headers.get('cookie'),
     }
 
-    // Sem configuração válida não adianta tentar falar com o banco.
+    // Sem configuração válida não adianta tentar falar com o banco. Os
+    // veredictos vão junto mesmo assim: quem consulta esta rota está
+    // perguntando "posso cobrar?", e omitir a resposta é pior que dá-la
+    // negativa — some justamente no caso em que algo está errado.
     if (!config.url.valida || !analise.serve) {
-      return NextResponse.json({ ok: false, etapa: 'configuração', config }, { status: 200 })
+      const impedimento = 'Supabase mal configurado: sem banco não há inscrição para cobrar.'
+      return NextResponse.json({
+        ok: false,
+        etapa: 'configuração',
+        prontoParaVender: false,
+        pendencias: [impedimento],
+        prontoParaTesteOperacional: false,
+        pendenciasDoTeste: [impedimento],
+        config,
+      }, { status: 200 })
     }
 
     // Uma leitura barata prova que a chave é aceita e que o schema está lá.
@@ -107,26 +119,54 @@ export function GET(request: Request) {
       erroFuncoes: erroFuncao?.message ?? null,
     }
 
-    // Checklist de venda: o que ainda impede cobrar de um aluno de verdade.
-    // Existe para não depender de alguém lembrar da lista na hora de abrir.
-    const pendencias: string[] = []
-    if (!banco.leTabelas || !banco.temFuncoes) pendencias.push('O banco não respondeu como esperado.')
-    if (!config.provedor.configurado) pendencias.push('UNICO_API_KEY ausente — sem ela nenhuma cobrança é real.')
-    else if (!config.provedor.chaveValida) pendencias.push('A chave da Únicopag foi recusada pela API.')
-    if (config.simulacao.ativa) pendencias.push('Simulação ativa — as cobranças não são reais.')
+    /*
+     * O que impede uma cobrança real de acontecer. Vale igual para vender e
+     * para o teste operacional: nos dois casos o dinheiro sai da conta de
+     * alguém de verdade. Existe para não depender de alguém lembrar da lista
+     * na hora de abrir.
+     */
+    const bloqueios: string[] = []
+    if (!banco.leTabelas || !banco.temFuncoes) bloqueios.push('O banco não respondeu como esperado.')
+    if (!config.provedor.configurado) bloqueios.push('UNICO_API_KEY ausente — sem ela nenhuma cobrança é real.')
+    else if (!config.provedor.chaveValida) bloqueios.push('A chave da Únicopag foi recusada pela API.')
+    if (config.simulacao.ativa) bloqueios.push('Simulação ativa — as cobranças não são reais.')
     // Combinação que trava o funil por inteiro e não é óbvia de enxergar.
     if (!config.simulacao.ativa && !config.provedor.configurado) {
-      pendencias.push('SIMULAR_PAGAMENTO=false sem UNICO_API_KEY: ninguém consegue pagar. Remova a variável ou configure o provedor.')
+      bloqueios.push('SIMULAR_PAGAMENTO=false sem UNICO_API_KEY: ninguém consegue pagar. Remova a variável ou configure o provedor.')
     }
-    if (confirmacaoManualPermitida()) pendencias.push('PERMITIR_CONFIRMACAO_MANUAL ligada — qualquer visitante conclui a inscrição sem pagar.')
-    if (!config.siteUrl) pendencias.push('NEXT_PUBLIC_SITE_URL ausente — a Únicopag precisa dela para avisar o pagamento.')
+    if (confirmacaoManualPermitida()) bloqueios.push('PERMITIR_CONFIRMACAO_MANUAL ligada — qualquer visitante conclui a inscrição sem pagar.')
+    if (!config.siteUrl) bloqueios.push('NEXT_PUBLIC_SITE_URL ausente — a Únicopag precisa dela para avisar o pagamento.')
+
+    // Vender exige, além do resto, que o preço em vigor seja o do curso.
+    const pendencias = [...bloqueios]
     if (PRECO_DE_TESTE) pendencias.push(`Preço de teste em uso (${formatarBRL(PRECO_CENTAVOS)}) — remova NEXT_PUBLIC_PRECO_TESTE_CENTAVOS antes de vender.`)
+
+    /*
+     * O teste operacional exige o contrário: pagar de verdade, mas centavos.
+     *
+     * A dica sobre "Sensitive" não é hipotética. `NEXT_PUBLIC_` é resolvida
+     * no build, e variável marcada como Sensitive na Vercel não fica
+     * disponível ali — o valor vira `undefined` e o preço volta calado para
+     * R$ 249, com a variável aparecendo como definida no painel.
+     */
+    const pendenciasDoTeste = [...bloqueios]
+    if (!PRECO_DE_TESTE) {
+      pendenciasDoTeste.push(
+        'NEXT_PUBLIC_PRECO_TESTE_CENTAVOS não chegou ao build — o preço em vigor é o real. ' +
+        'Se você já a definiu na Vercel, confira se ficou marcada como Sensitive: variável Sensitive ' +
+        'não é exposta no build, e é no build que NEXT_PUBLIC_ é resolvida. Recrie como Non-sensitive ' +
+        'em Production, Preview e Development, e refaça o deploy.',
+      )
+    }
 
     return NextResponse.json({
       ok: banco.leTabelas && banco.temFuncoes,
       etapa: banco.leTabelas && banco.temFuncoes ? 'tudo certo' : 'banco',
       prontoParaVender: pendencias.length === 0,
       pendencias,
+      // Cobrança real da Únicopag, com o valor reduzido em vigor.
+      prontoParaTesteOperacional: pendenciasDoTeste.length === 0,
+      pendenciasDoTeste,
       config,
       banco,
     })

@@ -6,11 +6,13 @@
 
 <!-- Marque o que foi tocado. -->
 
-- [ ] Landing / captura de dados (`/`)
-- [ ] Pagamento PIX (`/?etapa=pagamento`)
-- [ ] Confirmação (`/?etapa=confirmado`)
+- [ ] Landing de vendas (`/`)
+- [ ] Captura de dados (`/inscricao?etapa=dados`)
+- [ ] Pagamento PIX ou cartão (`/inscricao?etapa=pagamento`)
+- [ ] Confirmação (`/inscricao?etapa=confirmado`)
 - [ ] Triagem (`/triagem/[step]`)
 - [ ] Ficha do aluno / PWA (`/minha-inscricao`)
+- [ ] Credencial de conferência (`/validar/[token]`)
 - [ ] Design system (`app/globals.css`)
 - [ ] Infra, CI ou documentação
 
