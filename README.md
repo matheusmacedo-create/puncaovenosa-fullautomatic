@@ -233,7 +233,11 @@ O postback da Únicopag **não é fonte da verdade**. A documentação não desc
 
 O primeiro passo da triagem aceita **CEP ou endereço**. Digitando números, resolve o CEP pela ViaCEP e mostra o bairro e a cidade para o aluno confirmar. Digitando letras, vira busca por logradouro (`/ws/UF/Cidade/Rua/json/`) e lista as ruas encontradas — clicar numa delas preenche o CEP. Quem não sabe o próprio CEP é justamente quem trava num formulário; sem isso, restava mandar o aluno procurar em outro site no meio da inscrição.
 
-As duas consultas passam pelo servidor, por `/api/cep/[cep]` e `/api/enderecos`. É o padrão do projeto — quem fala com terceiro é o servidor —, mantém `connect-src 'self'` na CSP, evita expor o IP do aluno à ViaCEP e permite cachear (CEP não muda; um mês).
+As duas consultas passam pelo servidor, por `/api/cep/[cep]` e `/api/enderecos`. É o padrão do projeto — quem fala com terceiro é o servidor —, mantém `connect-src 'self'` na CSP, evita expor o IP do aluno aos provedores e permite cachear (CEP não muda; um mês).
+
+**A consulta por CEP usa duas fontes em cadeia.** A BrasilAPI vem primeiro, porque ela mesma consulta vários serviços por baixo e só desiste quando todos falham; a ViaCEP entra depois, como segunda opinião. Um CEP só é dado como inexistente quando as duas concordam — antes disso, o mais provável é que uma esteja fora do ar, e não que o aluno tenha digitado um endereço que não existe. Cada uma tem 4 segundos de paciência, então o pior caso são 8, e o normal é a primeira responder em menos de um.
+
+A **busca por nome de rua fica só na ViaCEP**: a BrasilAPI não tem esse endpoint (verificado — responde 404). As duas também divergem no formato do CEP (uma devolve `20230130`, a outra `20230-130`), uniformizado em `lib/cep.ts` para o resto do funil não precisar saber de qual veio.
 
 A busca por rua tem duas particularidades da ViaCEP que o código trata:
 
