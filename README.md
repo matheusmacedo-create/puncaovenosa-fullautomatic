@@ -100,6 +100,14 @@ Sem as variáveis do Supabase a interface sobe normalmente, mas as rotas de API 
 
 As segundas opções são os nomes que a integração Supabase da Vercel injeta sozinha. Num deploy pela Vercel com essa integração ativa, não é preciso configurar nada à mão.
 
+### Teste operacional com preço reduzido
+
+`NEXT_PUBLIC_PRECO_TESTE_CENTAVOS=10` faz o funil cobrar R$ 0,10 em vez de R$ 249. É o jeito de percorrer o fluxo pagando de verdade — o único caminho que prova que o dinheiro entra e a vaga é liberada.
+
+O valor é repartido entre os itens na mesma proporção do preço real (R$ 0,10 vira R$ 0,04 de matrícula e R$ 0,06 de curso), porque uma constraint no banco exige que a composição feche com o total, e a Únicopag recusa item com preço zero. Abaixo de um centavo por item, a composição vira um item único.
+
+O preço não é editado no código de propósito: um valor trocado à mão é fácil de esquecer revertido, e o curso passaria a ser vendido por centavos. Como variável, some sozinho quando ela sair — e o diagnóstico acusa enquanto estiver definida.
+
 ## Antes de vender
 
 `GET /api/diagnostico` responde `prontoParaVender` e lista o que falta. As pendências possíveis:
@@ -111,6 +119,7 @@ As segundas opções são os nomes que a integração Supabase da Vercel injeta 
 | Simulação ativa | As cobranças não são reais |
 | `PERMITIR_CONFIRMACAO_MANUAL` ligada | Qualquer visitante conclui a inscrição sem pagar |
 | `NEXT_PUBLIC_SITE_URL` ausente | A Únicopag não consegue avisar o pagamento |
+| Preço de teste em uso | O curso está sendo vendido por centavos |
 
 As rotas de pagamento declaram `maxDuration = 60`. A criação de cobrança no cartão leva cerca de 11 segundos na Únicopag, e o limite padrão de uma função na Vercel é 10 — sem isso, o aluno receberia erro numa cobrança possivelmente criada.
 

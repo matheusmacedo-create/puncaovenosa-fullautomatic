@@ -252,3 +252,5 @@ h1,h2,h3 { font-family: var(--font-archivo), sans-serif; line-height: 1.08; lett
 .validacao-hora { color: var(--ink-soft); font: 11px var(--font-mono); margin: 0; }
 .validacao-rodape { color: var(--ink-soft); font-size: 12px; margin: 0; }
 @media (max-width: 380px) { .validacao-dados { grid-template-columns: 1fr; } }
+
+.preco-de-teste { grid-column: 1 / -1; color: var(--cvb-red); font-size: 12px; font-weight: 650; margin: 10px 0 0; padding-top: 10px; border-top: 1px dashed var(--cvb-red); }

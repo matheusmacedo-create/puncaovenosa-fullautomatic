@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { rota } from '@/lib/http'
+import { formatarBRL, PRECO_CENTAVOS, PRECO_DE_TESTE } from '@/lib/enrollment'
 import { lerInscricaoId } from '@/lib/session'
 import { confirmacaoManualPermitida, estadoDaSimulacao } from '@/lib/simulacao'
 import { supabaseServer } from '@/lib/supabase/server'
@@ -82,6 +83,7 @@ export function GET(request: Request) {
       simulacao: estadoDaSimulacao(),
       provedor: await estadoDoProvedor(),
       siteUrl: siteUrl(),
+      preco: { centavos: PRECO_CENTAVOS, exibido: formatarBRL(PRECO_CENTAVOS), deTeste: PRECO_DE_TESTE },
       cookieDeSessao: (await lerInscricaoId()) ? 'presente' : 'ausente',
       recebeuCookies: !!request.headers.get('cookie'),
     }
@@ -118,6 +120,7 @@ export function GET(request: Request) {
     }
     if (confirmacaoManualPermitida()) pendencias.push('PERMITIR_CONFIRMACAO_MANUAL ligada — qualquer visitante conclui a inscrição sem pagar.')
     if (!config.siteUrl) pendencias.push('NEXT_PUBLIC_SITE_URL ausente — a Únicopag precisa dela para avisar o pagamento.')
+    if (PRECO_DE_TESTE) pendencias.push(`Preço de teste em uso (${formatarBRL(PRECO_CENTAVOS)}) — remova NEXT_PUBLIC_PRECO_TESTE_CENTAVOS antes de vender.`)
 
     return NextResponse.json({
       ok: banco.leTabelas && banco.temFuncoes,

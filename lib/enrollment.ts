@@ -110,10 +110,61 @@ export const triageQuestions = [
  * checkout o que ele está comprando — e porque matrícula e curso são coisas
  * distintas, que um dia podem ser cobradas em momentos diferentes.
  */
-export const COMPOSICAO_PRECO = [
+type ItemDePreco = { id: string; rotulo: string; detalhe?: string; centavos: number }
+
+const COMPOSICAO_REAL: ItemDePreco[] = [
   { id: 'matricula', rotulo: 'Matrícula', detalhe: 'Reserva da vaga e cadastro', centavos: 9900 },
   { id: 'curso', rotulo: 'Curso presencial', detalhe: '8 horas na sede CVB-RJ', centavos: 15000 },
-] as const
+]
+
+const TOTAL_REAL = COMPOSICAO_REAL.reduce((soma, item) => soma + item.centavos, 0)
+
+/**
+ * Preço reduzido para teste operacional — pagar de verdade sem gastar R$ 249.
+ *
+ * É variável de ambiente, e não um valor trocado no código, porque um preço
+ * editado à mão é fácil de esquecer revertido: o curso passaria a ser vendido
+ * por centavos para todo mundo. Assim, some sozinho quando a variável sair.
+ *
+ * `NEXT_PUBLIC_` de propósito: preço precisa ser o mesmo na tela e na
+ * cobrança, e mudá-lo exige um novo deploy — o que é desejável, porque preço
+ * não deveria mudar sem que alguém publique a mudança.
+ */
+function precoDeTeste(): number | null {
+  const bruto = process.env.NEXT_PUBLIC_PRECO_TESTE_CENTAVOS?.trim()
+  if (!bruto) return null
+  const centavos = Number(bruto)
+  if (!Number.isInteger(centavos) || centavos < 1) return null
+  return centavos
+}
+
+/**
+ * Reparte o total de teste entre os itens na mesma proporção do preço real,
+ * garantindo que a soma feche exatamente — há uma constraint no banco que
+ * exige isso, e a Únicopag recusa item com preço zero.
+ */
+function escalar(total: number): ItemDePreco[] {
+  // Pouco demais para repartir sem zerar alguém: vira item único.
+  if (total < COMPOSICAO_REAL.length) {
+    return [{ id: 'teste', rotulo: 'Teste operacional', detalhe: 'Cobrança de verificação', centavos: total }]
+  }
+  const escalados = COMPOSICAO_REAL.map(item => ({
+    ...item,
+    centavos: Math.max(1, Math.round((item.centavos / TOTAL_REAL) * total)),
+  }))
+  // O último item absorve a diferença do arredondamento.
+  const diferenca = total - escalados.reduce((soma, item) => soma + item.centavos, 0)
+  escalados[escalados.length - 1].centavos += diferenca
+  return escalados
+}
+
+/** Indica que o valor em uso não é o preço real do curso. */
+export const PRECO_DE_TESTE = precoDeTeste() !== null
+
+export const COMPOSICAO_PRECO: ItemDePreco[] = (() => {
+  const teste = precoDeTeste()
+  return teste === null ? COMPOSICAO_REAL : escalar(teste)
+})()
 
 /** Total cobrado. Derivado dos itens — nunca escreva o valor solto. */
 export const PRECO_CENTAVOS = COMPOSICAO_PRECO.reduce((soma, item) => soma + item.centavos, 0)
