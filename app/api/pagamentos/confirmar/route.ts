@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { corpo, erro, rota } from '@/lib/http'
+import { espelharNaPlanilha } from '@/lib/planilha'
 import { lerInscricaoId } from '@/lib/session'
 import { confirmacaoManualPermitida } from '@/lib/simulacao'
 import { supabaseServer } from '@/lib/supabase/server'
@@ -55,6 +56,7 @@ export function POST(request: Request) {
       return erro('Não foi possível confirmar o pagamento.', 502)
     }
 
+    if (!data.ja_confirmado) espelharNaPlanilha(inscricaoId)
     return NextResponse.json({
       numeroInscricao: data.numero_inscricao,
       jaConfirmado: data.ja_confirmado,

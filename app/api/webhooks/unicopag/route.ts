@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { corpo, erro, rota } from '@/lib/http'
 import { traduzirStatus } from '@/lib/pagamento-status'
+import { espelharNaPlanilha } from '@/lib/planilha'
 import { supabaseServer } from '@/lib/supabase/server'
 import { consultarTransacao } from '@/lib/unicopag'
 
@@ -39,7 +40,7 @@ export function POST(request: Request) {
     const supabase = supabaseServer()
     const { data: pagamento, error: erroLeitura } = await supabase
       .from('pagamentos')
-      .select('id, status')
+      .select('id, status, inscricao_id')
       .eq('provedor_id', hash)
       .maybeSingle()
 
@@ -66,18 +67,24 @@ export function POST(request: Request) {
         console.error('[funil] webhook: confirmação falhou:', error)
         return erro('Não foi possível confirmar.', 502)
       }
+      // Só na transição: o provedor pode reenviar o mesmo aviso, e a planilha
+      // não precisa ser reescrita a cada repetição.
+      if (!data.ja_confirmado) espelharNaPlanilha(pagamento.inscricao_id)
       return NextResponse.json({ ok: true, status, jaConfirmado: data.ja_confirmado })
     }
 
     // Desfechos sem sucesso só valem enquanto a cobrança ainda está pendente:
     // um pagamento já confirmado não pode ser rebaixado por um aviso atrasado.
     if (status === 'recusado' || status === 'expirado' || status === 'estornado') {
-      const { error } = await supabase
+      const { data: atualizados, error } = await supabase
         .from('pagamentos')
         .update({ status })
         .eq('id', pagamento.id)
         .eq('status', 'pendente')
+        .select('id')
       if (error) console.error('[funil] webhook: atualização falhou:', error)
+      // Recusa e expiração também interessam a quem acompanha pela planilha.
+      else if (atualizados?.length) espelharNaPlanilha(pagamento.inscricao_id)
     }
 
     return NextResponse.json({ ok: true, status })

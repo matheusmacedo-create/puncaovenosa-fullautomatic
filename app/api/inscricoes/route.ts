@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { digits, fieldError, EnrollmentData } from '@/lib/enrollment'
 import { corpo, erro, rota } from '@/lib/http'
+import { espelharNaPlanilha } from '@/lib/planilha'
 import { gravarInscricaoId } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabase/server'
 
@@ -47,6 +48,7 @@ export function POST(request: Request) {
     }
 
     await gravarInscricaoId(data.id)
+    espelharNaPlanilha(data.id)
     return NextResponse.json({
       id: data.id,
       status: data.status,

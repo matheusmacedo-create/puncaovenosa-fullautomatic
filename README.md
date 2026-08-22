@@ -229,6 +229,22 @@ A confirmação tem **dois caminhos independentes**, porque depender só do post
 
 O postback da Únicopag **não é fonte da verdade**. A documentação não descreve assinatura, então qualquer um que descobrisse a URL poderia forjar um "pago". O que chega serve apenas de gatilho: o `hash` é usado para consultar `GET /public/v1/transactions/:hash`, e é essa resposta que decide. Verificado na prática — um postback forjado dizendo `paid` não confirma a inscrição.
 
+### Planilha da secretaria
+
+Ponte provisória, ligada por `PLANILHA_URL` e `PLANILHA_TOKEN`. Sem as duas variáveis, o espelhamento não acontece e o funil funciona igual. Serve para a secretaria enxergar o que está sendo coletado antes de existir integração com os sistemas dela.
+
+Um Apps Script preso à planilha (`docs/planilha-secretaria.gs`, com o passo a passo de instalação no topo do arquivo) recebe um POST do servidor e mantém **uma linha por aluno**, encontrada pelo id da inscrição. A linha é escrita quando a inscrição é criada e reescrita a cada mudança de status do pagamento — inclusive recusa e expiração, para dar visibilidade ao abandono no funil.
+
+Três decisões que valem manter:
+
+- **A gravação sai do servidor, nunca do navegador.** Por isso nenhuma das duas variáveis leva `NEXT_PUBLIC_`: CPF não pode transitar pelo cliente rumo a um terceiro, e o token não pode existir no bundle — é ele que protege a planilha, já que o Google exige "qualquer pessoa" para aceitar POST sem login.
+- **Acontece depois da resposta**, via `after()` do `next/server`. O aluno não espera o Google, e um Apps Script lento não entra no tempo de criar inscrição nem de confirmar pagamento.
+- **Nunca lança.** Planilha fora do ar não derruba inscrição nem confirmação: o banco continua sendo a fonte da verdade e a planilha é uma cópia para leitura humana.
+
+O espelhamento só dispara na **transição** de status, e não a cada consulta — `/api/pagamentos/atual` é chamada a cada 10 segundos, e sem esse cuidado a planilha seria reescrita o tempo todo.
+
+A planilha guarda CPF e telefone de alunos reais. Deixe-a restrita a quem precisa, nunca "qualquer pessoa com o link".
+
 ### Dados de cartão e PCI-DSS
 
 A API da Únicopag **recebe o número do cartão em claro**; não há tokenização no navegador. O dado atravessa o nosso servidor a caminho do provedor, o que coloca a aplicação no escopo de PCI-DSS. As regras em vigor:
