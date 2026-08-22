@@ -199,7 +199,13 @@ h1,h2,h3,h4 { font-family: var(--font-archivo), sans-serif; letter-spacing: -.01
 .question-support { color: var(--ink-soft); font-size: 16px; line-height: 1.55; margin: -14px 0 24px; }
 .triage-input label span { color: var(--ink-soft); font-weight: 500; }
 .triage-actions { margin-top: 24px; max-width: 420px; }
-.address-result { color: var(--ok); margin-top: 12px; font-weight: 650; }
+/* Uma linha só, com a cor do que aconteceu: achou, não existe, ou nem deu
+   para perguntar. Vazia enquanto o CEP está incompleto — sem espaço morto. */
+.address-result { margin-top: 12px; font-weight: 650; color: var(--ok); }
+.address-result:empty { display: none; }
+.address-result.buscando { color: var(--ink-soft); font-weight: 500; }
+.address-result.nao-existe { color: var(--cvb-red); }
+.address-result.indisponivel { color: var(--warn); font-weight: 500; }
 
 .pass-page { min-height: 100dvh; padding: 28px 18px 72px; background: var(--paper); }
 .pass-page > header { max-width: 520px; margin: 0 auto 18px; display: flex; align-items: center; gap: 12px; }

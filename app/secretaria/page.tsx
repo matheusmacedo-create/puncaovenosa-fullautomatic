@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation'
 import { RedCross } from '@/components/clinical-header'
+import { resumoDaResposta } from '@/lib/cep'
 import { formatarBRL, maskCpf, maskPhone, triageQuestions } from '@/lib/enrollment'
 import { secretariaAutenticada, secretariaHabilitada } from '@/lib/secretaria'
 import { supabaseServer } from '@/lib/supabase/server'
@@ -29,7 +30,7 @@ const SITUACAO: Record<string, string> = {
 // Os passos que decidem a turma. Os outros (e-mail, confirmações finais) não
 // ajudam a montar calendário, então ficam de fora para a tabela caber na tela.
 const PASSOS_UTEIS = [
-  { passo: 1, rotulo: 'CEP' },
+  { passo: 1, rotulo: 'CEP / região' },
   { passo: 2, rotulo: 'Perfil' },
   { passo: 3, rotulo: 'Turno' },
   { passo: 4, rotulo: 'Dias' },
@@ -52,9 +53,13 @@ const dataHora = (iso: string) =>
   new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Sao_Paulo' })
     .format(new Date(iso))
 
-/** As respostas são jsonb e variam de forma por passo: texto, escolha, lista. */
-function respostaLegivel(valor: unknown): string {
+/**
+ * As respostas são jsonb e variam de forma por passo: texto, escolha, lista —
+ * e, no passo do CEP, um objeto com o endereço resolvido.
+ */
+function respostaLegivel(passo: number, valor: unknown): string {
   if (valor == null) return '—'
+  if (passo === 1) return resumoDaResposta(valor)
   if (Array.isArray(valor)) {
     if (valor.every(v => typeof v === 'boolean')) return valor.every(Boolean) ? 'sim' : 'não'
     return valor.join(', ')
@@ -177,7 +182,7 @@ export default async function SecretariaPage({
                 </td>
                 {PASSOS_UTEIS.map(p => (
                   <td key={p.passo} className="secretaria-triagem" title={triageQuestions[p.passo - 1]?.title}>
-                    {respostasDaPessoa?.has(p.passo) ? respostaLegivel(respostasDaPessoa.get(p.passo)) : '—'}
+                    {respostasDaPessoa?.has(p.passo) ? respostaLegivel(p.passo, respostasDaPessoa.get(p.passo)) : '—'}
                   </td>
                 ))}
               </tr>

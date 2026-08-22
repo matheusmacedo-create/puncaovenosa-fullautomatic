@@ -229,6 +229,16 @@ A confirmação tem **dois caminhos independentes**, porque depender só do post
 
 O postback da Únicopag **não é fonte da verdade**. A documentação não descreve assinatura, então qualquer um que descobrisse a URL poderia forjar um "pago". O que chega serve apenas de gatilho: o `hash` é usado para consultar `GET /public/v1/transactions/:hash`, e é essa resposta que decide. Verificado na prática — um postback forjado dizendo `paid` não confirma a inscrição.
 
+### CEP na triagem
+
+O primeiro passo da triagem resolve o CEP de verdade, pela ViaCEP, e mostra o bairro e a cidade para o aluno confirmar antes de seguir. A consulta passa por `/api/cep/[cep]`, e não sai do navegador: é o padrão do projeto — quem fala com terceiro é o servidor —, mantém `connect-src 'self'` na CSP, evita expor o IP do aluno à ViaCEP e permite cachear (CEP não muda; um mês).
+
+A resposta do passo 1 guarda `{ cep, bairro, cidade, uf }`, e não só o número, para a secretaria montar turma por região sem consultar CEP a CEP depois. Os leitores aceitam também a forma antiga, em texto puro: há rascunhos em `localStorage` de quem começou a triagem antes.
+
+Falha de consulta e CEP inexistente são tratados diferente, de propósito: um CEP que não existe quase sempre é dígito errado e **bloqueia** o avanço; a ViaCEP fora do ar é problema nosso e **não** pode custar a vaga de quem digitou certo — a tela avisa e deixa seguir.
+
+> A versão anterior exibia `Tijuca, Rio de Janeiro` fixo assim que o campo chegava a 8 dígitos, viesse o CEP de onde viesse. Era um resquício do mockup, e dizia a coisa errada para todo mundo que não fosse da Tijuca.
+
 ### Painel da secretaria
 
 `/secretaria` mostra ao vivo o que está passando pelo funil: quem entrou, quem pagou, e as respostas de triagem que definem a turma (CEP, perfil, turno, dias, urgência, origem). Lê direto do banco, que já é a fonte da verdade — não há cópia para sincronizar nem exportação para agendar.

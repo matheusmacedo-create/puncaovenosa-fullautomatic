@@ -1,10 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ClinicalHeader } from '@/components/clinical-header'
+import { cepDaResposta, resumoDoEndereco } from '@/lib/cep'
 import { digits, loadJson, maskCep, ROTA_INSCRICAO, saveJson, STORAGE_KEYS, TriageAnswers, triageQuestions } from '@/lib/enrollment'
-import { buscarTriagem, salvarResposta } from '@/lib/api-cliente'
+import { buscarEnderecoDoCep, ErroDaApi, buscarTriagem, salvarResposta } from '@/lib/api-cliente'
 
 export function TriageFlow({ step }: { step: number }) {
   const router = useRouter()
@@ -45,12 +46,103 @@ export function TriageFlow({ step }: { step: number }) {
       <p className="question-number">Pergunta {step} de 8</p>
       <h1>{question.title}</h1>
       {question.type === 'single' && <div className="choices">{'options' in question && question.options.map(option => <button key={option} className={`choice-button ${value === option ? 'selected' : ''}`} onClick={() => choose(option)}>{option}</button>)}</div>}
-      {question.type === 'cep' && <div className="field triage-input"><label htmlFor="cep">CEP</label><input id="cep" type="text" inputMode="numeric" autoComplete="postal-code" placeholder="00000-000" value={typeof value === 'string' ? value : ''} onChange={e => { setError(''); save(maskCep(e.target.value)) }} onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && e.keyCode !== 229) { if (digits(String(value || '')).length === 8) next(); else setError('CEP incompleto — digite os 8 números.') } }} aria-invalid={!!error} />{digits(String(value || '')).length === 8 && <p className="address-result">Tijuca, Rio de Janeiro</p>}{error && <p className="error">{error}</p>}<div className="triage-actions"><button className="primary-button full" onClick={() => digits(String(value || '')).length === 8 ? next() : setError('CEP incompleto — digite os 8 números.')}>Continuar</button></div></div>}
+      {question.type === 'cep' && <CepQuestion value={value} save={save} next={next} />}
       {question.type === 'email' && <EmailQuestion value={typeof value === 'string' ? value : ''} save={save} next={next} />}
       {question.type === 'multi' && <MultiQuestion options={[...question.options]} value={Array.isArray(value) ? value as string[] : []} save={save} next={next} />}
       {question.type === 'confirm' && <ConfirmQuestion options={[...question.options]} value={Array.isArray(value) ? value as boolean[] : []} save={save} next={next} />}
     </section>
   </main>
+}
+
+type BuscaDeCep =
+  | { estado: 'parado' }
+  | { estado: 'buscando' }
+  | { estado: 'achou'; lugar: string }
+  | { estado: 'nao-existe' }
+  | { estado: 'indisponivel' }
+
+/**
+ * CEP com o endereço resolvido de verdade.
+ *
+ * A versão anterior exibia "Tijuca, Rio de Janeiro" fixo assim que o campo
+ * chegava a 8 dígitos, viesse o CEP de onde viesse — era um resquício do
+ * mockup, e dizia a coisa errada para todo mundo que não fosse da Tijuca.
+ *
+ * Guarda o endereço junto com o CEP, e não só o número, para a secretaria
+ * montar turma por região sem precisar consultar CEP a CEP depois.
+ */
+function CepQuestion({
+  value, save, next,
+}: {
+  value: string | string[] | boolean[] | undefined
+  save: (v: never) => void
+  next: () => void
+}) {
+  const cep = cepDaResposta(value)
+  const numeros = digits(cep)
+  const completo = numeros.length === 8
+
+  const [busca, setBusca] = useState<BuscaDeCep>({ estado: 'parado' })
+  const [error, setError] = useState('')
+  // Evita repetir a consulta quando o componente re-renderiza sem o CEP mudar.
+  const consultado = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (!completo) { setBusca({ estado: 'parado' }); consultado.current = null; return }
+    if (consultado.current === numeros) return
+    consultado.current = numeros
+
+    let cancelado = false
+    setBusca({ estado: 'buscando' })
+
+    buscarEnderecoDoCep(numeros)
+      .then(endereco => {
+        if (cancelado) return
+        setBusca({ estado: 'achou', lugar: resumoDoEndereco(endereco) })
+        setError('')
+        save({ cep, bairro: endereco.bairro, cidade: endereco.cidade, uf: endereco.uf } as never)
+      })
+      .catch((e: unknown) => {
+        if (cancelado) return
+        // 404 é CEP que não existe — quase sempre um dígito errado. Qualquer
+        // outra falha é problema nosso ou do provedor, e não pode custar a
+        // vaga de quem digitou certo.
+        const naoExiste = e instanceof ErroDaApi && e.status === 404
+        setBusca({ estado: naoExiste ? 'nao-existe' : 'indisponivel' })
+        save({ cep } as never)
+      })
+
+    return () => { cancelado = true }
+    // `save` e `cep` mudam a cada tecla; a consulta só depende do CEP completo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [numeros, completo])
+
+  const seguir = () => {
+    if (!completo) return setError('CEP incompleto — digite os 8 números.')
+    if (busca.estado === 'nao-existe') return setError('Esse CEP não existe. Confira os números.')
+    next()
+  }
+
+  return <div className="field triage-input">
+    <label htmlFor="cep">CEP</label>
+    <input id="cep" type="text" inputMode="numeric" autoComplete="postal-code" placeholder="00000-000"
+      value={cep}
+      onChange={e => { setError(''); save(maskCep(e.target.value) as never) }}
+      onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && e.keyCode !== 229) seguir() }}
+      aria-invalid={!!error || busca.estado === 'nao-existe'} />
+
+    <p className={`address-result ${busca.estado}`} aria-live="polite">
+      {busca.estado === 'buscando' && 'Procurando o endereço…'}
+      {busca.estado === 'achou' && busca.lugar}
+      {busca.estado === 'nao-existe' && 'CEP não encontrado.'}
+      {busca.estado === 'indisponivel' && 'Não deu para conferir o endereço agora — pode seguir assim mesmo.'}
+    </p>
+
+    {error && <p className="error">{error}</p>}
+    <div className="triage-actions">
+      <button className="primary-button full" onClick={seguir}>Continuar</button>
+    </div>
+  </div>
 }
 
 function EmailQuestion({ value, save, next }: { value: string; save: (v: string) => void; next: () => void }) {
