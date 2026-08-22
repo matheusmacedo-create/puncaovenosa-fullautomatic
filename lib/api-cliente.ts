@@ -1,5 +1,6 @@
 'use client'
 
+import type { Endereco } from '@/lib/cep'
 import { EnrollmentData, PagamentoMetodo, PagamentoStatus } from '@/lib/enrollment'
 
 /**
@@ -107,3 +108,6 @@ export const salvarResposta = (passo: number, resposta: unknown) =>
     method: 'PUT',
     body: JSON.stringify({ passo, resposta }),
   })
+
+export const buscarEnderecoDoCep = (cepEmDigitos: string) =>
+  pedir<Endereco>(`/api/cep/${cepEmDigitos}`)
