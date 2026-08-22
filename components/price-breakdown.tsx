@@ -1,4 +1,4 @@
-import { COMPOSICAO_PRECO, formatarBRL, PRECO_CENTAVOS } from '@/lib/enrollment'
+import { COMPOSICAO_PRECO, formatarBRL, PRECO_CENTAVOS, PRECO_DE_TESTE } from '@/lib/enrollment'
 
 /**
  * Composição do preço, item a item.
@@ -20,5 +20,6 @@ export function PriceBreakdown({ itens = COMPOSICAO_PRECO, total = PRECO_CENTAVO
       <dt>Total à vista</dt>
       <dd>{formatarBRL(total)}</dd>
     </div>
+    {PRECO_DE_TESTE && <p className="preco-de-teste" role="status">Valor reduzido para teste operacional. Não é o preço do curso.</p>}
   </dl>
 }
