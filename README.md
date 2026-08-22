@@ -1,16 +1,20 @@
 # Curso de Punção Venosa — Cruz Vermelha Brasileira RJ
 
-Aplicação Next.js do funil de inscrição do **Curso de Punção Venosa (8h, presencial)** da Cruz Vermelha Brasileira — Rio de Janeiro: checkout via PIX ou cartão, confirmação de vaga, triagem de 8 perguntas e ficha do aluno em PWA. Os dados são persistidos em Postgres no Supabase.
+Aplicação Next.js do **Curso de Punção Venosa (8h, presencial)** da Cruz Vermelha Brasileira — Rio de Janeiro: página de vendas, checkout via PIX ou cartão, confirmação de vaga, triagem de 8 perguntas e ficha do aluno em PWA. Os dados são persistidos em Postgres no Supabase.
+
+Página de vendas e checkout são **um app só**, e não dois projetos. Não é organização: a sessão do aluno é um cookie `SameSite=Lax`, que o navegador não envia dentro de um iframe de outra origem — em dois domínios, o aluno pagaria e voltaria sem inscrição.
 
 ## Fluxo do produto
 
 | Etapa | Rota | O que acontece |
 | --- | --- | --- |
-| 1. Captura | `/` | Landing + bottom sheet de dados (nome, WhatsApp, CPF, pré-requisito de ensino médio) e composição do preço |
-| 2. Pagamento | `/?etapa=pagamento` | Escolha entre PIX (copia-e-cola com timer de 30 min) e cartão (com parcelamento). Estados `pendente / confirmado / expirado / recusado` |
-| 3. Confirmação | `/?etapa=confirmado` | Vaga garantida — convite para a triagem |
+| 0. Venda | `/` | Landing: oferta, conteúdo, FAQ, prova institucional. Os CTAs abrem o checkout numa gaveta sobre a página, preservando UTMs e a variante do teste A/B |
+| 1. Captura | `/inscricao?etapa=dados` | Dados (nome, WhatsApp, e-mail, CPF, pré-requisito de ensino médio) e composição do preço |
+| 2. Pagamento | `/inscricao?etapa=pagamento` | Escolha entre PIX (copia-e-cola) e cartão (com parcelamento). Estados `pendente / confirmado / expirado / recusado` |
+| 3. Confirmação | `/inscricao?etapa=confirmado` | Vaga garantida — convite para a triagem |
 | 4. Triagem | `/triagem/1` … `/triagem/8` | CEP, perfil profissional, turno, dias, urgência, e-mail opcional, origem e confirmação final |
 | 5. Ficha do aluno | `/minha-inscricao` | Comprovante com QR, dados do curso e local — instalável como PWA e imprimível |
+| 6. Conferência | `/validar/[token]` | Credencial do aluno lida na portaria, sem login |
 
 A sessão do aluno é um cookie `httpOnly` (`cvb_inscricao`) com o id da inscrição — não há login. O `localStorage` (`cvb-enrollment`, `cvb-triage`) continua como cache do rascunho, mas **o servidor é a fonte da verdade**.
 
@@ -22,7 +26,7 @@ A sessão do aluno é um cookie `httpOnly` (`cvb_inscricao`) com o id da inscri�
 | Curso presencial, 8h | R$ 150,00 |
 | **Total à vista** | **R$ 249,00** |
 
-O aluno paga o total de uma vez, em PIX ou cartão. A composição é definida em `COMPOSICAO_PRECO` (`lib/enrollment.ts`) e o total é **derivado da soma** — nunca escreva o valor solto.
+O aluno paga o total de uma vez, em PIX ou cartão. A composição é definida em `COMPOSICAO_PRECO` (`lib/enrollment.ts`) e o total é **derivado da soma** — nunca escreva o valor solto. A landing lê os mesmos valores por `lib/course-data.ts`: anunciar um preço e cobrar outro é o pior defeito possível numa página de venda.
 
 Cada cobrança grava sua própria composição na coluna `pagamentos.itens`, e uma constraint no banco exige que os itens fechem com `valor_centavos`. Isso impede que uma cobrança de R$ 249 seja registrada com itens somando R$ 99.
 

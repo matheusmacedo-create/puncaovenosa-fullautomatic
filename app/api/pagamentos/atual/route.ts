@@ -5,7 +5,7 @@ import { confirmacaoManualPermitida, simulacaoAtiva } from '@/lib/simulacao'
 import { traduzirStatus } from '@/lib/pagamento-status'
 import { consultarTransacao } from '@/lib/unicopag'
 import { supabaseServer } from '@/lib/supabase/server'
-import { MINUTOS_PARA_EXPIRAR } from '@/lib/enrollment'
+import { MINUTOS_PARA_EXPIRAR, PRECO_CENTAVOS } from '@/lib/enrollment'
 
 /**
  * A criação de cobrança no cartão leva por volta de 11 segundos na Únicopag,
@@ -39,6 +39,19 @@ export function GET() {
       return erro('Não foi possível consultar o pagamento.', 502)
     }
     if (!data) return NextResponse.json({ existe: false, simulacao: simulacaoAtiva(), confirmacaoManual: confirmacaoManualPermitida() })
+
+    // Nunca reutilize uma cobrança criada com outro preço (por exemplo, uma
+    // cobrança real de R$ 249 persistida antes do modo de teste de R$ 0,10).
+    // Sem esta barreira, ela sobrescreve a tela e exibe também o QR antigo.
+    if (data.valor_centavos !== PRECO_CENTAVOS) {
+      return NextResponse.json({
+        existe: false,
+        ignoradaPorPrecoDiferente: true,
+        precoAtualCentavos: PRECO_CENTAVOS,
+        simulacao: simulacaoAtiva(),
+        confirmacaoManual: confirmacaoManualPermitida(),
+      })
+    }
 
     // Pergunta ao provedor em vez de esperar o aviso dele.
     //

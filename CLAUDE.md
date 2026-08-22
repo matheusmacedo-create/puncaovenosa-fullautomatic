@@ -4,7 +4,9 @@ Contexto que vale carregar antes de mexer em qualquer coisa aqui.
 
 ## O que é
 
-Funil de inscrição do Curso de Punção Venosa da Cruz Vermelha Brasileira RJ. Next.js 16 (App Router, Turbopack), React 19, TypeScript strict, Tailwind 4. Ver `README.md` para o mapa de rotas e etapas.
+Página de vendas **e** funil de inscrição do Curso de Punção Venosa da Cruz Vermelha Brasileira RJ, no mesmo app. Next.js 16 (App Router, Turbopack), React 19, TypeScript strict, Tailwind 4. Ver `README.md` para o mapa de rotas e etapas.
+
+A landing mora em `/`; o funil, em `/inscricao` e adiante. Os CTAs abrem o funil numa gaveta em iframe (`components/checkout-overlay.tsx`) sobre a landing. Não separe os dois em projetos diferentes: a sessão é um cookie `SameSite=Lax`, que o navegador não envia num iframe de outra origem — o aluno pagaria e voltaria sem inscrição.
 
 ## Comandos
 
@@ -20,10 +22,11 @@ Use **pnpm**, nunca npm ou yarn — o lockfile é do pnpm e o CI roda com `--fro
 ## Convenções do código
 
 - Estilo enxuto, uma linha por bloco JSX quando cabe — é o padrão que veio do v0 e está mantido por todo o projeto. Combine com o arquivo ao redor em vez de reformatar.
-- Sem biblioteca de CSS-in-JS: todo o visual está em `app/globals.css` com classes semânticas (`.triage-shell`, `.primary-button`, `.student-pass`). Reaproveite classe existente antes de criar uma nova.
+- Duas linguagens de estilo convivem em `app/globals.css`, de propósito: a **landing** usa utilitários do Tailwind e tokens shadcn (`--background`, `--primary`); o **funil** usa classes semânticas e tokens crus (`--paper`, `--ink`, `--cvb-red`, `--rule`). Os tokens shadcn são derivados dos crus — a paleta é uma só. Escrevendo no funil, reaproveite classe existente (`.triage-shell`, `.primary-button`, `.student-pass`) antes de criar uma nova; escrevendo na landing, siga os utilitários.
 - Textos de interface em **português do Brasil**, tom clínico e direto.
 - Alias de import é `@/*` apontando para a raiz.
-- `lib/enrollment.ts` é a fonte única de máscaras, validação (CPF e cartão), preço, chaves de `localStorage` e das 8 perguntas da triagem. Mudou lá, confira `/` e `/triagem/[step]`.
+- `lib/enrollment.ts` é a fonte única de máscaras, validação (CPF e cartão), preço, rota do funil, chaves de `localStorage` e das 8 perguntas da triagem. Mudou lá, confira `/inscricao` e `/triagem/[step]`.
+- `lib/course-data.ts` é a fonte da copy e dos números da landing, mas **o preço dela vem de `lib/enrollment.ts`** — os mesmos centavos que o checkout cobra. Nunca escreva um valor à mão ali: sob preço de teste a página anunciaria R$ 249 e a cobrança sairia por centavos.
 - Banco só pelo servidor: `lib/supabase/server.ts` usa a chave secreta e **nunca** pode ser importado de um Client Component. O navegador fala com `lib/api-cliente.ts`, que chama as rotas em `app/api/`.
 
 ## Armadilhas

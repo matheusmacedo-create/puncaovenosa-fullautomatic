@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ClinicalHeader } from '@/components/clinical-header'
-import { digits, loadJson, maskCep, saveJson, STORAGE_KEYS, TriageAnswers, triageQuestions } from '@/lib/enrollment'
+import { digits, loadJson, maskCep, ROTA_INSCRICAO, saveJson, STORAGE_KEYS, TriageAnswers, triageQuestions } from '@/lib/enrollment'
 import { buscarTriagem, salvarResposta } from '@/lib/api-cliente'
 
 export function TriageFlow({ step }: { step: number }) {
@@ -33,7 +33,7 @@ export function TriageFlow({ step }: { step: number }) {
     salvarResposta(step, value).catch(() => undefined)
   }
   const next = () => step === 8 ? router.push('/minha-inscricao') : router.push(`/triagem/${step + 1}`)
-  const back = () => step === 1 ? router.push('/?etapa=confirmado') : router.push(`/triagem/${step - 1}`)
+  const back = () => step === 1 ? router.push(`${ROTA_INSCRICAO}?etapa=confirmado`) : router.push(`/triagem/${step - 1}`)
   const choose = (value: string) => { save(value); window.setTimeout(next, 200) }
   const value = answers[key]
 
