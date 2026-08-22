@@ -28,6 +28,7 @@ Use **pnpm**, nunca npm ou yarn — o lockfile é do pnpm e o CI roda com `--fro
 - `lib/enrollment.ts` é a fonte única de máscaras, validação (CPF e cartão), preço, rota do funil, chaves de `localStorage` e das 8 perguntas da triagem. Mudou lá, confira `/inscricao` e `/triagem/[step]`.
 - `lib/course-data.ts` é a fonte da copy e dos números da landing, mas **o preço dela vem de `lib/enrollment.ts`** — os mesmos centavos que o checkout cobra. Nunca escreva um valor à mão ali: sob preço de teste a página anunciaria R$ 249 e a cobrança sairia por centavos.
 - Banco só pelo servidor: `lib/supabase/server.ts` usa a chave secreta e **nunca** pode ser importado de um Client Component. O navegador fala com `lib/api-cliente.ts`, que chama as rotas em `app/api/`.
+- `/secretaria` é o painel de acompanhamento, ligado por `SECRETARIA_SENHA` (mínimo 16 caracteres; sem ela a rota é 404). Lê direto do banco e renderiza no servidor — nada de cache numa tela de acompanhamento. O formulário de entrada funciona sem JavaScript, de propósito.
 - `lib/planilha.ts` espelha a inscrição numa planilha do Google (ponte provisória para a secretaria). Só dispara na **transição** de status, nunca a cada consulta — `/api/pagamentos/atual` roda a cada 10s. Usa `after()` para não entrar no tempo de resposta e nunca lança: planilha fora do ar não pode derrubar uma inscrição. `PLANILHA_URL` e `PLANILHA_TOKEN` não levam `NEXT_PUBLIC_`, e não podem passar a levar.
 
 ## Armadilhas
