@@ -4,8 +4,18 @@
  *
  * A consulta é feita pelo servidor, e não pelo navegador, pelo mesmo motivo
  * de todo o resto aqui: quem fala com terceiro é o servidor. Assim o IP do
- * aluno não vai para a ViaCEP, a CSP continua com `connect-src 'self'`, e
- * trocar de provedor um dia é mexer num arquivo só.
+ * aluno não vai para fora, a CSP continua com `connect-src 'self'`, e trocar
+ * de provedor um dia é mexer num arquivo só.
+ *
+ * São duas fontes, em cadeia. A BrasilAPI vem primeiro porque ela mesma
+ * consulta vários serviços por baixo e só desiste quando todos falham; a
+ * ViaCEP entra depois, como segunda opinião. Um CEP só é dado como
+ * inexistente quando as duas concordam — antes disso, o mais provável é que
+ * uma delas esteja fora do ar, e não que o aluno tenha digitado um endereço
+ * que não existe.
+ *
+ * A busca por nome de rua fica só na ViaCEP: a BrasilAPI não tem esse
+ * endpoint (verificado — responde 404).
  */
 
 export type Endereco = {
@@ -70,18 +80,60 @@ export function resumoDaResposta(resposta: unknown): string {
   return `${cep} · ${lugar}${uf ? `/${uf}` : ''}`
 }
 
-export async function buscarEndereco(cepEmDigitos: string): Promise<Endereco> {
-  if (!CEP_VALIDO.test(cepEmDigitos)) throw new CepNaoEncontrado()
+// CEP não muda: um mês de cache poupa os provedores e devolve na hora para o
+// segundo aluno do mesmo bairro.
+const CACHE_DE_UM_MES = { revalidate: 60 * 60 * 24 * 30 }
 
-  const resposta = await fetch(`https://viacep.com.br/ws/${cepEmDigitos}/json/`, {
-    // CEP não muda: um mês de cache poupa a ViaCEP e devolve na hora para o
-    // segundo aluno do mesmo bairro.
-    next: { revalidate: 60 * 60 * 24 * 30 },
-    signal: AbortSignal.timeout(5_000),
+// Duas fontes em sequência não podem somar a espera de duas: 4s cada deixa o
+// pior caso em 8s, e o normal é a primeira responder em menos de um.
+const PACIENCIA = 4_000
+
+const comMascara = (cep: string) => {
+  const d = cep.replace(/\D/g, '')
+  return d.length === 8 ? `${d.slice(0, 5)}-${d.slice(5)}` : cep
+}
+
+/** Resposta da BrasilAPI v2. CEP inexistente vem como 404. */
+type RespostaBrasilApi = {
+  cep?: string
+  street?: string
+  neighborhood?: string
+  city?: string
+  state?: string
+}
+
+async function pelaBrasilApi(cepEmDigitos: string): Promise<Endereco> {
+  const resposta = await fetch(`https://brasilapi.com.br/api/cep/v2/${cepEmDigitos}`, {
+    next: CACHE_DE_UM_MES,
+    signal: AbortSignal.timeout(PACIENCIA),
   })
 
-  // 400 é formato inválido, não indisponibilidade — o guarda acima já deveria
-  // ter barrado, mas se passar, é erro de quem digitou, não da ViaCEP.
+  // 404 aqui significa que todos os serviços que ela consulta falharam.
+  if (resposta.status === 404) throw new CepNaoEncontrado()
+  if (!resposta.ok) throw new Error(`BrasilAPI respondeu ${resposta.status}`)
+
+  const dados = (await resposta.json()) as RespostaBrasilApi
+  if (!dados.cep) throw new CepNaoEncontrado()
+
+  return {
+    // Ela devolve sem máscara; a ViaCEP devolve com. Uniformiza aqui para o
+    // resto do funil não precisar saber de qual das duas veio.
+    cep: comMascara(dados.cep),
+    logradouro: dados.street || null,
+    bairro: dados.neighborhood || null,
+    cidade: dados.city || null,
+    uf: dados.state || null,
+  }
+}
+
+async function pelaViaCep(cepEmDigitos: string): Promise<Endereco> {
+  const resposta = await fetch(`https://viacep.com.br/ws/${cepEmDigitos}/json/`, {
+    next: CACHE_DE_UM_MES,
+    signal: AbortSignal.timeout(PACIENCIA),
+  })
+
+  // 400 é formato inválido, não indisponibilidade — o guarda de entrada já
+  // deveria ter barrado, mas se passar, é erro de quem digitou.
   if (resposta.status === 400) throw new CepNaoEncontrado()
   if (!resposta.ok) throw new Error(`ViaCEP respondeu ${resposta.status}`)
 
@@ -96,6 +148,21 @@ export async function buscarEndereco(cepEmDigitos: string): Promise<Endereco> {
     cidade: dados.localidade || null,
     uf: dados.uf || null,
   }
+}
+
+export async function buscarEndereco(cepEmDigitos: string): Promise<Endereco> {
+  if (!CEP_VALIDO.test(cepEmDigitos)) throw new CepNaoEncontrado()
+
+  try {
+    return await pelaBrasilApi(cepEmDigitos)
+  } catch (e) {
+    // Mesmo um "não encontrado" da primeira fonte vale uma segunda opinião: o
+    // custo é uma requisição, e o preço de errar é dizer a um aluno que o
+    // endereço dele não existe.
+    if (!(e instanceof CepNaoEncontrado)) console.error('[funil] BrasilAPI falhou:', e)
+  }
+
+  return pelaViaCep(cepEmDigitos)
 }
 
 /**
