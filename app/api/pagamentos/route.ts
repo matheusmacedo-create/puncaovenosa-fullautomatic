@@ -10,6 +10,7 @@ import { confirmacaoManualPermitida, simulacaoAtiva } from '@/lib/simulacao'
 import { supabaseServer } from '@/lib/supabase/server'
 import { urlDoWebhook } from '@/lib/site-url'
 import { criarPagamento, NovoPagamento, UnicopagErro } from '@/lib/unicopag'
+import { notificarSecretaria } from '@/lib/webhook-secretaria'
 
 /**
  * A criação de cobrança no cartão leva por volta de 11 segundos na Únicopag,
@@ -163,6 +164,8 @@ export function POST(request: Request) {
       console.error('[funil] gravação do pagamento falhou:', error)
       return erro('Não foi possível registrar a cobrança. Tente novamente.', 502)
     }
+
+    notificarSecretaria(inscricaoId, 'pagamento_iniciado')
 
     return NextResponse.json({
       id: data.id,

@@ -24,6 +24,10 @@ export type Endereco = {
   bairro: string | null
   cidade: string | null
   uf: string | null
+  // Só a BrasilAPI devolve isto, e nem sempre — muitos CEPs não têm
+  // coordenada nas fontes que ela consulta por baixo. A ViaCEP nunca devolve.
+  latitude: number | null
+  longitude: number | null
 }
 
 /** Resposta da ViaCEP. CEP inexistente vem como 200 com `erro`, não como 404. */
@@ -59,7 +63,16 @@ export function resumoDoEndereco(endereco: Endereco): string {
  * Os leitores aceitam as duas formas: há rascunhos em `localStorage` no
  * navegador de quem começou a triagem antes desta mudança.
  */
-export type RespostaDeCep = string | { cep?: string; bairro?: string | null; cidade?: string | null; uf?: string | null }
+export type RespostaDeCep =
+  | string
+  | {
+      cep?: string
+      bairro?: string | null
+      cidade?: string | null
+      uf?: string | null
+      latitude?: number | null
+      longitude?: number | null
+    }
 
 export function cepDaResposta(resposta: unknown): string {
   if (typeof resposta === 'string') return resposta
@@ -68,6 +81,22 @@ export function cepDaResposta(resposta: unknown): string {
     return typeof cep === 'string' ? cep : ''
   }
   return ''
+}
+
+/**
+ * Coordenada gravada na resposta do passo 1, se houver.
+ *
+ * Só existe a partir de quando o passo passou a guardar `latitude`/`longitude`
+ * junto do endereço — rascunhos e inscrições de antes disso não têm, e isso é
+ * esperado: o mapa da secretaria simplesmente não desenha um ponto para elas,
+ * em vez de adivinhar uma coordenada que ninguém confirmou.
+ */
+export function coordsDaResposta(resposta: unknown): { latitude: number; longitude: number } | null {
+  if (typeof resposta !== 'object' || resposta === null) return null
+  const { latitude, longitude } = resposta as { latitude?: unknown; longitude?: unknown }
+  if (typeof latitude !== 'number' || typeof longitude !== 'number') return null
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null
+  return { latitude, longitude }
 }
 
 /** O que a secretaria lê na coluna de CEP: o número e, se houver, o lugar. */
@@ -83,6 +112,53 @@ export function resumoDaResposta(resposta: unknown): string {
 // CEP não muda: um mês de cache poupa os provedores e devolve na hora para o
 // segundo aluno do mesmo bairro.
 const CACHE_DE_UM_MES = { revalidate: 60 * 60 * 24 * 30 }
+
+/**
+ * Geocodificação aproximada por bairro/cidade, para quando o CEP não trouxe
+ * coordenada exata — a maioria dos casos: só a BrasilAPI devolve, e nem
+ * sempre, e a ViaCEP nunca devolve.
+ *
+ * Não é a rua do aluno, é o centro da área que ele informou — mas é o que
+ * basta para o mapa da secretaria ganhar um ponto em vez de deixar a
+ * inscrição de fora. Chamada pelo servidor, do mesmo jeito que o resto deste
+ * arquivo: nunca do navegador direto para o Nominatim.
+ */
+async function pelaNominatim(bairro: string | null, cidade: string | null, uf: string | null): Promise<{ latitude: number; longitude: number } | null> {
+  if (!cidade) return null
+
+  const consulta = [bairro, cidade, uf, 'Brasil'].filter(Boolean).join(', ')
+
+  try {
+    const resposta = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=br&q=${encodeURIComponent(consulta)}`,
+      {
+        // Exigido pelo termo de uso do Nominatim: sem User-Agent identificável, bloqueia.
+        headers: { 'User-Agent': 'puncaovenosa-fullautomatic (contato@cruzvermelhariodejaneiro.org)' },
+        next: CACHE_DE_UM_MES,
+        signal: AbortSignal.timeout(4_000),
+      },
+    )
+    if (!resposta.ok) return null
+
+    const dados = (await resposta.json()) as Array<{ lat?: string; lon?: string }>
+    const [primeiro] = dados
+    if (!primeiro?.lat || !primeiro?.lon) return null
+
+    const latitude = Number(primeiro.lat)
+    const longitude = Number(primeiro.lon)
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null
+
+    return { latitude, longitude }
+  } catch (e) {
+    console.error('[funil] geocodificação aproximada falhou:', e)
+    return null
+  }
+}
+
+/** Ponto de entrada único para a geocodificação aproximada — hoje só o Nominatim, mas fica isolado caso troque. */
+export function coordenadaAproximada(bairro: string | null, cidade: string | null, uf: string | null) {
+  return pelaNominatim(bairro, cidade, uf)
+}
 
 // Duas fontes em sequência não podem somar a espera de duas: 4s cada deixa o
 // pior caso em 8s, e o normal é a primeira responder em menos de um.
@@ -100,6 +176,14 @@ type RespostaBrasilApi = {
   neighborhood?: string
   city?: string
   state?: string
+  location?: { coordinates?: { longitude?: string; latitude?: string } }
+}
+
+/** As duas vêm como string, e vazias quando a fonte não tem a coordenada — nunca "0". */
+function numeroOuNulo(valor: string | undefined): number | null {
+  if (!valor) return null
+  const n = Number(valor)
+  return Number.isFinite(n) && n !== 0 ? n : null
 }
 
 async function pelaBrasilApi(cepEmDigitos: string): Promise<Endereco> {
@@ -123,6 +207,8 @@ async function pelaBrasilApi(cepEmDigitos: string): Promise<Endereco> {
     bairro: dados.neighborhood || null,
     cidade: dados.city || null,
     uf: dados.state || null,
+    latitude: numeroOuNulo(dados.location?.coordinates?.latitude),
+    longitude: numeroOuNulo(dados.location?.coordinates?.longitude),
   }
 }
 
@@ -147,6 +233,9 @@ async function pelaViaCep(cepEmDigitos: string): Promise<Endereco> {
     bairro: dados.bairro || null,
     cidade: dados.localidade || null,
     uf: dados.uf || null,
+    // A ViaCEP não devolve coordenada — só a BrasilAPI, e nem sempre.
+    latitude: null,
+    longitude: null,
   }
 }
 
@@ -209,6 +298,8 @@ async function consultarPorEndereco(uf: string, cidade: string, logradouro: stri
       bairro: d.bairro || null,
       cidade: d.localidade || null,
       uf: d.uf || null,
+      latitude: null,
+      longitude: null,
     }))
 }
 

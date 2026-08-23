@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server'
+import { coordenadaAproximada } from '@/lib/cep'
 import { triageQuestions } from '@/lib/enrollment'
 import { corpo, erro, rota } from '@/lib/http'
 import { lerInscricaoId } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabase/server'
+import { notificarSecretaria } from '@/lib/webhook-secretaria'
 
 type Payload = { passo?: number; resposta?: unknown }
 
@@ -50,11 +52,25 @@ export function PUT(request: Request) {
     }
     if (body.resposta === undefined || body.resposta === null) return erro('Resposta ausente.', 422)
 
+    // Passo 1 é o CEP/endereço. Quando a busca não trouxe coordenada exata
+    // (a maioria dos casos — só a BrasilAPI devolve, e nem sempre), completa
+    // com uma aproximada por bairro/cidade, para o mapa da secretaria não
+    // deixar a inscrição de fora. Roda aqui, e não na busca em si, porque o
+    // aluno não espera esta gravação — `save()` no front é fire-and-forget.
+    let resposta = body.resposta
+    if (passo === 1 && typeof resposta === 'object') {
+      const r = resposta as { bairro?: string | null; cidade?: string | null; uf?: string | null; latitude?: unknown; longitude?: unknown }
+      if (typeof r.latitude !== 'number' || typeof r.longitude !== 'number') {
+        const aproximada = await coordenadaAproximada(r.bairro ?? null, r.cidade ?? null, r.uf ?? null)
+        if (aproximada) resposta = { ...r, latitude: aproximada.latitude, longitude: aproximada.longitude }
+      }
+    }
+
     const supabase = supabaseServer()
     const { error } = await supabase
       .from('triagem_respostas')
       .upsert(
-        { inscricao_id: inscricaoId, passo, resposta: body.resposta },
+        { inscricao_id: inscricaoId, passo, resposta },
         { onConflict: 'inscricao_id,passo' },
       )
 
@@ -66,6 +82,8 @@ export function PUT(request: Request) {
     const { data: concluida } = await supabase.rpc('concluir_triagem_se_completa', {
       p_inscricao_id: inscricaoId,
     })
+
+    if (concluida === true) notificarSecretaria(inscricaoId, 'triagem_concluida')
 
     return NextResponse.json({ salvo: true, concluida: concluida === true })
   })

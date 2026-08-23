@@ -1,9 +1,11 @@
 import { notFound } from 'next/navigation'
 import { RedCross } from '@/components/clinical-header'
-import { resumoDaResposta } from '@/lib/cep'
+import { SecretariaMapa, type PontoMapa } from '@/components/secretaria-mapa'
+import { coordsDaResposta, resumoDaResposta } from '@/lib/cep'
 import { formatarBRL, maskCpf, maskPhone, triageQuestions } from '@/lib/enrollment'
 import { secretariaAutenticada, secretariaHabilitada } from '@/lib/secretaria'
 import { supabaseServer } from '@/lib/supabase/server'
+import { EVENTOS_WEBHOOK, webhookSecretariaConfigurado } from '@/lib/webhook-secretaria'
 
 /**
  * Painel da secretaria: o que está passando pelo funil, ao vivo.
@@ -26,6 +28,35 @@ const SITUACAO: Record<string, string> = {
   triagem_concluida: 'Inscrição completa',
   cancelada: 'Cancelada',
 }
+
+const NOME_DO_EVENTO: Record<string, string> = {
+  inscricao_recebida: 'Inscrição recebida',
+  pagamento_iniciado: 'Pagamento iniciado',
+  pagamento_confirmado: 'Pagamento confirmado',
+  pagamento_falhou: 'Pagamento falhou',
+  triagem_concluida: 'Triagem concluída',
+}
+
+const STATUS_DE_FALHA = ['recusado', 'expirado', 'estornado']
+
+const EXEMPLO_PAYLOAD = `{
+  "evento": "pagamento_confirmado",
+  "disparadoEm": "2026-08-23T14:02:11.000Z",
+  "inscricao": {
+    "id": "5f2c...",
+    "numeroInscricao": "CVB-2026-0031",
+    "nome": "Maria da Silva",
+    "cpf": "12345678900",
+    "telefone": "21999998888",
+    "email": "maria@exemplo.com",
+    "ensinoMedio": true,
+    "status": "paga",
+    "criadoEm": "2026-08-23T13:58:02.000Z",
+    "atualizadoEm": "2026-08-23T14:02:11.000Z"
+  },
+  "pagamento": { "status": "confirmado", "metodo": "pix", "valorCentavos": 24900 },
+  "triagemRespondida": 0
+}`
 
 // Os passos que decidem a turma. Os outros (e-mail, confirmações finais) não
 // ajudam a montar calendário, então ficam de fora para a tabela caber na tela.
@@ -70,20 +101,21 @@ function respostaLegivel(passo: number, valor: unknown): string {
 export default async function SecretariaPage({
   searchParams,
 }: {
-  searchParams: Promise<{ erro?: string }>
+  searchParams: Promise<{ erro?: string; reenviado?: string; erroWebhook?: string }>
 }) {
   // Deploy que não pediu por este painel não tem este painel.
   if (!secretariaHabilitada()) notFound()
 
+  const params = await searchParams
+
   if (!(await secretariaAutenticada())) {
-    const { erro } = await searchParams
     return <Moldura>
       <form className="secretaria-entrada" method="post" action="/secretaria/entrar">
         <h1>Painel da secretaria</h1>
         <p>Acompanhamento das inscrições do Curso de Punção Venosa.</p>
         <label htmlFor="senha">Senha de acesso</label>
         <input id="senha" name="senha" type="password" autoComplete="current-password" required autoFocus />
-        {erro && <p className="secretaria-erro" role="alert">Senha incorreta.</p>}
+        {params.erro && <p className="secretaria-erro" role="alert">Senha incorreta.</p>}
         <button className="primary-button full" type="submit">Entrar</button>
       </form>
     </Moldura>
@@ -136,12 +168,107 @@ export default async function SecretariaPage({
   const pagas = (inscricoes ?? []).filter(i => i.status === 'paga' || i.status === 'triagem_concluida').length
   const completas = (inscricoes ?? []).filter(i => i.status === 'triagem_concluida').length
 
+  // Funil completo: quem entrou (total) contra quem realmente matriculou
+  // (triagem_concluida) — e onde, no meio do caminho, cada um empacou.
+  const rascunhos = (inscricoes ?? []).filter(i => i.status === 'rascunho').length
+  const aguardando = (inscricoes ?? []).filter(i => i.status === 'aguardando_pagamento').length
+  const pagouSoTriagemFalta = (inscricoes ?? []).filter(i => i.status === 'paga').length
+  const canceladas = (inscricoes ?? []).filter(i => i.status === 'cancelada').length
+  const falhasDePagamento = [...ultimaCobranca.values()].filter(p => STATUS_DE_FALHA.includes(p.status)).length
+  const taxaDeMatricula = total ? Math.round((completas / total) * 100) : 0
+
+  // Pontos do mapa: só quem tem coordenada gravada na resposta do passo 1 —
+  // exata (BrasilAPI) ou aproximada por bairro/cidade (Nominatim, gravada em
+  // PUT /api/triagem quando a exata não veio).
+  const pontosMapa: PontoMapa[] = (inscricoes ?? []).flatMap(i => {
+    const passo1 = triagem.get(i.id)?.get(1)
+    const coords = coordsDaResposta(passo1)
+    if (!coords) return []
+    return [{
+      id: i.id,
+      latitude: coords.latitude,
+      longitude: coords.longitude,
+      popup: `${resumoDaResposta(passo1)} · ${SITUACAO[i.status] ?? i.status}`,
+      criadoEm: i.criado_em,
+    }]
+  })
+
+  // Checkpoint do webhook: lido à parte porque a tabela só existe depois da
+  // migration 0009 — um banco ainda não atualizado não pode derrubar o resto
+  // do painel, só deixar esse bloco de fora.
+  const webhookConfigurado = webhookSecretariaConfigurado()
+  const { data: entregas, error: erroEntregas } = await supabase
+    .from('webhook_entregas')
+    .select('id, inscricao_id, evento, sucesso, status_http, erro, criado_em')
+    .order('criado_em', { ascending: false })
+    .limit(50)
+
+  const nomePorInscricao = new Map((inscricoes ?? []).map(i => [i.id, i.nome]))
+  const falhasRecentes = (entregas ?? []).filter(e => !e.sucesso).length
+
   return <Moldura autenticado>
     <div className="secretaria-resumo">
-      <div><strong>{total}</strong><span>no funil</span></div>
+      <div><strong>{total}</strong><span>entraram no funil</span></div>
       <div><strong>{pagas}</strong><span>pagaram</span></div>
-      <div><strong>{completas}</strong><span>triagem completa</span></div>
+      <div><strong>{completas}</strong><span>matricularam ({taxaDeMatricula}%)</span></div>
     </div>
+
+    {total > 0 && (
+      <section className="secretaria-bloco">
+        <h2>Funil completo — quem entrou × quem matriculou</h2>
+        <p className="secretaria-bloco-legenda">
+          De {total} que começaram, {completas} concluíram a matrícula. O resto está parado em algum ponto —
+          é aqui que dá para ver onde.
+        </p>
+        <div className="secretaria-quedas">
+          <div className="secretaria-queda">
+            <strong>{rascunhos}</strong>
+            <span>preencheram os dados e não abriram cobrança</span>
+          </div>
+          <div className="secretaria-queda">
+            <strong>{aguardando}</strong>
+            <span>abriram cobrança e não pagaram</span>
+          </div>
+          <div className="secretaria-queda">
+            <strong>{pagouSoTriagemFalta}</strong>
+            <span>pagaram e não terminaram a triagem</span>
+          </div>
+          <div className="secretaria-queda ok">
+            <strong>{completas}</strong>
+            <span>matrícula completa</span>
+          </div>
+          {canceladas > 0 && (
+            <div className="secretaria-queda alerta">
+              <strong>{canceladas}</strong>
+              <span>canceladas</span>
+            </div>
+          )}
+          {falhasDePagamento > 0 && (
+            <div className="secretaria-queda alerta">
+              <strong>{falhasDePagamento}</strong>
+              <span>cobranças recusadas, expiradas ou estornadas</span>
+            </div>
+          )}
+        </div>
+      </section>
+    )}
+
+    <section className="secretaria-bloco">
+      <h2>De onde vêm as inscrições</h2>
+      <p className="secretaria-bloco-legenda">
+        Um ponto aproximado por inscrição, na região do CEP ou endereço informado na triagem — não é a rua exata,
+        é o suficiente para enxergar de onde o pessoal está vindo. A cor não é status, é tempo: verde forte para
+        quem acabou de entrar, esmaecendo para laranja conforme as semanas passam — o mapa vai "preenchendo" e dá
+        para ver de longe onde uma região ficou parada.
+        {pontosMapa.length > 0 && ` Mostrando ${pontosMapa.length} de ${total} inscrições.`}
+      </p>
+      <div className="secretaria-mapa-legenda">
+        <span>Recém-chegado</span>
+        <span className="secretaria-mapa-gradiente" />
+        <span>Há {'>'}8 semanas</span>
+      </div>
+      <SecretariaMapa pontos={pontosMapa} />
+    </section>
 
     {total === 0 ? (
       <p className="secretaria-vazio">Nenhuma inscrição ainda. Assim que alguém preencher a primeira etapa, ela aparece aqui.</p>
@@ -191,6 +318,95 @@ export default async function SecretariaPage({
         </table>
       </div>
     )}
+
+    <section className="secretaria-bloco">
+      <h2>Checkpoint do webhook</h2>
+      <p className="secretaria-bloco-legenda">
+        Cada evento do funil (inscrição recebida, pagamento iniciado, pagamento confirmado, pagamento falhou,
+        triagem concluída) é enviado ao sistema da secretaria por aqui. Esta lista é onde uma entrega que falhou
+        fica visível — o funil continua andando mesmo se o outro lado estiver fora do ar, mas isto aqui é o
+        lugar para perceber que ele esteve.
+      </p>
+
+      {params.reenviado && <p className="secretaria-selo ok" role="status">Reenviado.</p>}
+      {params.erroWebhook && <p className="secretaria-erro" role="alert">Não foi possível reenviar. Confira o log abaixo.</p>}
+
+      <div className={`secretaria-webhook-status ${webhookConfigurado ? 'ok' : 'espera'}`}>
+        {webhookConfigurado
+          ? 'Configurado — WEBHOOK_SECRETARIA_URL e WEBHOOK_SECRETARIA_SEGREDO definidas.'
+          : 'Não configurado. Sem WEBHOOK_SECRETARIA_URL e WEBHOOK_SECRETARIA_SEGREDO no ambiente, nenhum evento é enviado — o funil segue funcionando normalmente.'}
+      </div>
+
+      {erroEntregas ? (
+        <p className="secretaria-vazio">
+          O log de entregas ainda não está disponível — provavelmente a migration <code>0009_webhook_entregas</code> não
+          foi aplicada neste banco ainda.
+        </p>
+      ) : !entregas || entregas.length === 0 ? (
+        <p className="secretaria-vazio">Nenhuma entrega ainda.</p>
+      ) : (
+        <>
+          {falhasRecentes > 0 && (
+            <p className="secretaria-erro" role="alert">{falhasRecentes} entrega(s) com falha nas últimas {entregas.length}.</p>
+          )}
+          <div className="secretaria-tabela-rolagem">
+            <table className="secretaria-tabela">
+              <thead>
+                <tr>
+                  <th>Quando</th>
+                  <th>Evento</th>
+                  <th>Aluno</th>
+                  <th>Resultado</th>
+                  <th>Detalhe</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {entregas.map(e => (
+                  <tr key={e.id}>
+                    <td className="secretaria-quando">{dataHora(e.criado_em)}</td>
+                    <td>{NOME_DO_EVENTO[e.evento] ?? e.evento}</td>
+                    <td>{nomePorInscricao.get(e.inscricao_id) ?? '—'}</td>
+                    <td><span className={`secretaria-selo ${e.sucesso ? 'ok' : 'espera'}`}>{e.sucesso ? 'entregue' : 'falhou'}</span></td>
+                    <td className="secretaria-sub">{e.status_http ?? '—'}{e.erro ? ` · ${e.erro}` : ''}</td>
+                    <td>
+                      {!e.sucesso && webhookConfigurado && (
+                        <form method="post" action="/secretaria/webhook/reenviar">
+                          <input type="hidden" name="inscricaoId" value={e.inscricao_id} />
+                          <input type="hidden" name="evento" value={e.evento} />
+                          <button className="text-button" type="submit">Reenviar</button>
+                        </form>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      <details className="secretaria-contrato">
+        <summary>Contrato para o outro sistema plugar (payload, eventos, assinatura)</summary>
+        <p>
+          Configure <code>WEBHOOK_SECRETARIA_URL</code> (endereço que recebe o POST) e{' '}
+          <code>WEBHOOK_SECRETARIA_SEGREDO</code> (usado para assinar) nas variáveis de ambiente do projeto.
+          Sem as duas, nada é enviado.
+        </p>
+        <p>
+          Cada evento é um <code>POST</code> com corpo JSON e dois cabeçalhos: <code>X-Cvb-Evento</code> com o
+          nome do evento, e <code>X-Cvb-Assinatura</code> com <code>sha256=&lt;hmac-hex&gt;</code>, calculado
+          sobre o corpo cru com <code>WEBHOOK_SECRETARIA_SEGREDO</code>. Valide a assinatura antes de processar —
+          o corpo por si só não prova que veio daqui.
+        </p>
+        <p>Eventos possíveis: {EVENTOS_WEBHOOK.map(ev => <code key={ev}>{NOME_DO_EVENTO[ev] ?? ev}</code>)}.</p>
+        <pre className="secretaria-payload">{EXEMPLO_PAYLOAD}</pre>
+        <p>
+          Responda 2xx para marcar como entregue. Qualquer outra coisa fica registrada como falha nesta tela,
+          com o motivo, e pode ser reenviada por aqui — sem retentativa automática.
+        </p>
+      </details>
+    </section>
 
     <p className="secretaria-rodape">
       Lista lida do banco no momento em que esta página abriu — atualize para ver o que entrou depois.

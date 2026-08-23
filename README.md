@@ -269,7 +269,9 @@ A busca por rua tem duas particularidades da ViaCEP que o código trata:
 - **Ela casa pedaço de texto, não palavra.** Quem procura "Praça da Cruz Vermelha" não acha "Praça Cruz Vermelha", porque o "da" não está lá — e é assim que as pessoas falam o nome da rua. Quando a primeira busca volta vazia, há uma segunda sem as ligações (`da`, `de`, `do`, `das`, `dos`, `e`). É tentativa, e não regra: em "Avenida das Américas" a ligação faz parte do nome, e tirá-la de saída estragaria a busca que teria funcionado.
 - **UF, cidade e rua são obrigatórios**, com no mínimo três letras nas duas últimas. A UF e a cidade vêm preenchidas com RJ e Rio de Janeiro, que é de onde vem quase todo mundo num curso presencial na sede, e quem não é de lá troca.
 
-A resposta do passo 1 guarda `{ cep, bairro, cidade, uf }`, e não só o número, para a secretaria montar turma por região sem consultar CEP a CEP depois. Os leitores aceitam também a forma antiga, em texto puro: há rascunhos em `localStorage` de quem começou a triagem antes.
+A resposta do passo 1 guarda `{ cep, bairro, cidade, uf, latitude, longitude }`, e não só o número, para a secretaria montar turma por região sem consultar CEP a CEP depois. Os leitores aceitam também a forma antiga, em texto puro: há rascunhos em `localStorage` de quem começou a triagem antes. É o que alimenta o mapa em `/secretaria`.
+
+**A coordenada tem duas origens, em cadeia.** A exata vem da BrasilAPI, quando ela tem — nem sempre tem, e a ViaCEP nunca devolve coordenada. Quando falta, `PUT /api/triagem` completa com uma coordenada **aproximada**, geocodificando bairro + cidade + UF pelo [Nominatim](https://nominatim.openstreetmap.org/) (`coordenadaAproximada` em `lib/cep.ts`) antes de gravar a resposta do passo 1. Não é a rua do aluno, é o centro da área que ele informou — mas é o suficiente para o ponto existir no mapa em vez de a inscrição ficar de fora. Essa segunda busca roda na gravação da triagem, não na tela de CEP em si: o aluno não espera por ela, porque `save()` no `triage-flow.tsx` já é fire-and-forget.
 
 Falha de consulta e CEP inexistente são tratados diferente, de propósito: um CEP que não existe quase sempre é dígito errado e **bloqueia** o avanço; a ViaCEP fora do ar é problema nosso e **não** pode custar a vaga de quem digitou certo — a tela avisa e deixa seguir.
 
@@ -277,13 +279,20 @@ Falha de consulta e CEP inexistente são tratados diferente, de propósito: um C
 
 ### Painel da secretaria
 
-`/secretaria` mostra ao vivo o que está passando pelo funil: quem entrou, quem pagou, e as respostas de triagem que definem a turma (CEP, perfil, turno, dias, urgência, origem). Lê direto do banco, que já é a fonte da verdade — não há cópia para sincronizar nem exportação para agendar.
+`/secretaria` é o checkpoint do funil inteiro: quem entrou, quem pagou, quem matriculou de verdade, onde cada um empacou, de onde vêm as inscrições e se a integração com o sistema principal da secretaria está entregando. Lê direto do banco, que já é a fonte da verdade — não há cópia para sincronizar nem exportação para agendar.
 
 Ligado por `SECRETARIA_SENHA`. Sem ela a rota responde **404**: um deploy que não pediu pelo painel não tem painel para invadir. A senha precisa ter no mínimo 16 caracteres, e o painel não liga com menos — não há como limitar tentativas numa página exposta na internet sem um lugar para contá-las, então a defesa possível é exigir que ela seja longa.
 
 O formulário de entrada é `method="post"` puro, sem JavaScript: a secretaria pode estar num computador antigo, e uma tela de acompanhamento não deveria depender de bundle. O cookie de sessão (`cvb_secretaria`, httpOnly, 8 horas) guarda o hash da senha, não a senha.
 
 A página lista nome, CPF e telefone de alunos reais. A senha é da secretaria, não de divulgação.
+
+O painel tem quatro blocos:
+
+- **Resumo e funil completo** — quantos entraram, quantos pagaram, quantos matricularam de fato (triagem concluída), e a contagem em cada ponto de queda: só preencheu os dados, abriu cobrança e não pagou, pagou e não terminou a triagem, cancelou, ou teve cobrança recusada/expirada/estornada. É a resposta direta para "quem tem entrado e quem realmente tem feito matrícula".
+- **Mapa de origem** — um ponto aproximado por inscrição, na região do CEP/endereço informado na triagem (ver [CEP na triagem](#cep-na-triagem) acima para as duas fontes de coordenada). A cor é por tempo, não por status: verde forte para quem acabou de entrar, esmaecendo para laranja fraco ao longo de 8 semanas — dá para ver o mapa "preenchendo" e onde uma região ficou parada.
+- **Tabela de inscrições** — a lista detalhada que já existia: contato, situação, cobrança e as respostas de triagem que definem a turma (CEP, perfil, turno, dias, urgência, origem).
+- **Checkpoint do webhook** — ver [Webhook de eventos](#webhook-de-eventos-para-a-secretaria-principal) abaixo.
 
 ### Planilha da secretaria (alternativa)
 
@@ -300,6 +309,30 @@ Três decisões que valem manter:
 O espelhamento só dispara na **transição** de status, e não a cada consulta — `/api/pagamentos/atual` é chamada a cada 10 segundos, e sem esse cuidado a planilha seria reescrita o tempo todo.
 
 A planilha guarda CPF e telefone de alunos reais. Deixe-a restrita a quem precisa, nunca "qualquer pessoa com o link".
+
+### Webhook de eventos (para a secretaria principal)
+
+Diferente da planilha acima — que é uma ponte provisória para leitura humana —, este é a integração de verdade: a cada transição relevante do funil, o app faz um `POST` para `WEBHOOK_SECRETARIA_URL` com um evento de negócio, para o sistema da secretaria consumir programaticamente. Implementado em `lib/webhook-secretaria.ts`.
+
+**Eventos disparados**, cada um no ponto exato da transição:
+
+| Evento | Quando |
+|---|---|
+| `inscricao_recebida` | `POST /api/inscricoes` — dados da etapa 1 gravados |
+| `pagamento_iniciado` | `POST /api/pagamentos` — cobrança aberta (PIX ou cartão) |
+| `pagamento_confirmado` | Confirmação vier de onde vier: webhook da Únicopag, consulta em `/api/pagamentos/atual`, ou confirmação manual |
+| `pagamento_falhou` | Cobrança marcada como `recusado`, `expirado` ou `estornado` |
+| `triagem_concluida` | Os 8 passos da triagem foram respondidos |
+
+**Formato:** corpo JSON com o estado atual da inscrição (não um diff), montado a partir do banco no momento do envio — nunca do que quem disparou o evento tinha em mãos. Dois cabeçalhos identificam a entrega: `X-Cvb-Evento` com o nome do evento, e `X-Cvb-Assinatura` com `sha256=<hmac-hex>`, um HMAC-SHA256 do corpo cru usando `WEBHOOK_SECRETARIA_SEGREDO`. **Valide a assinatura antes de processar** — diferente do postback da Únicopag (que não tem assinatura documentada, e por isso o funil nunca confia nele — ver [Confirmação de pagamento](#confirmação-de-pagamento)), aqui o formato é nosso, então dá para exigir prova de origem desde o primeiro evento.
+
+O exemplo completo do payload, a lista de eventos e o texto de configuração aparecem também dentro do próprio painel, no bloco "Checkpoint do webhook" — pensado para o programador que for plugar a integração não precisar sair da tela.
+
+**Sem `WEBHOOK_SECRETARIA_URL` e `WEBHOOK_SECRETARIA_SEGREDO`, nada é enviado** e o funil funciona normalmente — igual à planilha, é opcional.
+
+Toda tentativa de entrega — sucesso ou falha — fica gravada em `webhook_entregas` (`supabase/migrations/0009_webhook_entregas.sql`), e é esse log que o bloco "Checkpoint do webhook" em `/secretaria` mostra: quantas falharam recentemente, o motivo (status HTTP ou erro de rede) de cada uma, e um botão para reenviar manualmente sem esperar o próximo evento natural do funil. Não há retentativa automática — uma falha fica visível e esperando alguém decidir reenviar, em vez de reentrar sozinha e mascarar quanto tempo o outro sistema ficou sem saber do que aconteceu.
+
+Como a planilha, nunca lança e roda depois da resposta ao aluno (`after()`): o outro sistema fora do ar não pode derrubar uma inscrição nem uma confirmação de pagamento.
 
 ### Dados de cartão e PCI-DSS
 

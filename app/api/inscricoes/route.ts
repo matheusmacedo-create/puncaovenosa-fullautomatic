@@ -4,6 +4,7 @@ import { corpo, erro, rota } from '@/lib/http'
 import { espelharNaPlanilha } from '@/lib/planilha'
 import { gravarInscricaoId } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabase/server'
+import { notificarSecretaria } from '@/lib/webhook-secretaria'
 
 type Payload = { name?: string; phone?: string; cpf?: string; email?: string; highSchool?: boolean }
 
@@ -49,6 +50,7 @@ export function POST(request: Request) {
 
     await gravarInscricaoId(data.id)
     espelharNaPlanilha(data.id)
+    notificarSecretaria(data.id, 'inscricao_recebida')
     return NextResponse.json({
       id: data.id,
       status: data.status,

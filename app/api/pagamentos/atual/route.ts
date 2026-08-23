@@ -7,6 +7,7 @@ import { espelharNaPlanilha } from '@/lib/planilha'
 import { consultarTransacao } from '@/lib/unicopag'
 import { supabaseServer } from '@/lib/supabase/server'
 import { MINUTOS_PARA_EXPIRAR, PRECO_CENTAVOS } from '@/lib/enrollment'
+import { notificarSecretaria } from '@/lib/webhook-secretaria'
 
 /**
  * A criação de cobrança no cartão leva por volta de 11 segundos na Únicopag,
@@ -74,7 +75,10 @@ export function GET() {
         }
         // Esta rota é consultada em intervalos, então só espelha quando o
         // status realmente mudou — senão a planilha seria reescrita a cada 10s.
-        if (status !== data.status) espelharNaPlanilha(inscricaoId)
+        if (status !== data.status) {
+          espelharNaPlanilha(inscricaoId)
+          notificarSecretaria(inscricaoId, status === 'confirmado' ? 'pagamento_confirmado' : 'pagamento_falhou')
+        }
       } catch (e) {
         // Provedor fora do ar não pode derrubar a tela: seguimos com o que o
         // banco sabe, e a próxima consulta tenta de novo.
