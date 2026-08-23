@@ -55,8 +55,10 @@ export default function PoliticaDePrivacidadePage() {
           <li>O Supabase, que hospeda o banco de dados da inscrição, protegido por controle de acesso restrito ao servidor;</li>
           <li>
             A Meta (Facebook/Instagram), que recebe eventos de conversão para medir o resultado dos
-            anúncios — dados como e-mail, telefone e CPF são transformados em hash irreversível
-            antes do envio, nunca enviados em texto claro;
+            anúncios, e também, para quem preenche os dados e não conclui a matrícula, um público de
+            remarketing para mostrar novos anúncios — em ambos os casos, e-mail, telefone e CPF são
+            transformados em hash irreversível antes do envio, nunca enviados em texto claro. Assim
+            que a matrícula é paga, a pessoa sai desse público;
           </li>
           <li>Autoridades públicas, quando exigido por lei ou ordem judicial.</li>
         </ul>

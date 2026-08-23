@@ -4,6 +4,7 @@ import { SecretariaMapa, type PontoMapa } from '@/components/secretaria-mapa'
 import { coordsDaResposta, resumoDaResposta } from '@/lib/cep'
 import { formatarBRL, maskCpf, maskPhone, triageQuestions } from '@/lib/enrollment'
 import { metaCapiConfigurado } from '@/lib/meta-capi'
+import { audienciaConfigurada, JANELA_DE_ABANDONO_HORAS } from '@/lib/meta-audiencia'
 import { secretariaAutenticada, secretariaHabilitada } from '@/lib/secretaria'
 import { supabaseServer } from '@/lib/supabase/server'
 import { EVENTOS_WEBHOOK, webhookSecretariaConfigurado } from '@/lib/webhook-secretaria'
@@ -113,6 +114,8 @@ export default async function SecretariaPage({
     erro?: string
     reenviado?: string; erroWebhook?: string
     reenviadoMeta?: string; erroMeta?: string
+    sincronizadoAudiencia?: string; falhasAudiencia?: string; removidosAudiencia?: string; erroAudiencia?: string
+    audienciaCriada?: string; erroAudienciaCriar?: string
   }>
 }) {
   // Deploy que não pediu por este painel não tem este painel.
@@ -237,6 +240,18 @@ export default async function SecretariaPage({
     .limit(50)
 
   const falhasRecentesMeta = (entregasMeta ?? []).filter(e => !e.sucesso).length
+
+  // Checkpoint do público de remarketing: mesma lógica, para quem está no
+  // público personalizado do Meta agora (adicionado e ainda não removido).
+  const audienciaConfig = audienciaConfigurada()
+  const { count: noPublicoAgora, error: erroPublico } = await supabase
+    .from('meta_publico_membros')
+    .select('id', { count: 'exact', head: true })
+    .is('removido_em', null)
+  const { count: jaRemovidos } = await supabase
+    .from('meta_publico_membros')
+    .select('id', { count: 'exact', head: true })
+    .not('removido_em', 'is', null)
 
   return <Moldura autenticado>
     <div className="secretaria-resumo">
@@ -538,6 +553,76 @@ export default async function SecretariaPage({
           que o navegador nem sempre captura a tempo (ou nunca captura, como o CPF). O <code>event_id</code> é o
           mesmo que o pixel do navegador manda para o mesmo evento, então o Meta deduplica os dois como um só em
           vez de contar a venda duas vezes.
+        </p>
+      </details>
+    </section>
+
+    <section className="secretaria-bloco">
+      <h2>Checkpoint do público de remarketing</h2>
+      <p className="secretaria-bloco-legenda">
+        Quem preencheu nome, telefone e e-mail no funil e não pagou depois de {JANELA_DE_ABANDONO_HORAS}h vai,
+        com hash, para um público personalizado no Meta — para anunciar de novo só para quem ficou pelo caminho.
+        Sincroniza 1x por dia (limite do plano Hobby da Vercel); a remoção de quem paga é na hora.
+      </p>
+
+      {params.sincronizadoAudiencia && (
+        <p className="secretaria-selo ok" role="status">
+          {params.sincronizadoAudiencia} adicionado(s){params.removidosAudiencia && `, ${params.removidosAudiencia} removido(s)`}.
+          {params.falhasAudiencia && ` ${params.falhasAudiencia} falha(s) — confira o log do servidor.`}
+        </p>
+      )}
+      {params.erroAudiencia && <p className="secretaria-erro" role="alert">Não foi possível sincronizar agora.</p>}
+      {params.audienciaCriada && (
+        <p className="secretaria-selo ok" role="status">
+          Público criado — id <code>{params.audienciaCriada}</code>. Salve em <code>META_AUDIENCE_ABANDONADOS_ID</code> na
+          Vercel para a sincronização passar a funcionar.
+        </p>
+      )}
+      {params.erroAudienciaCriar && <p className="secretaria-erro" role="alert">Não foi possível criar o público: {params.erroAudienciaCriar}</p>}
+
+      <div className={`secretaria-webhook-status ${audienciaConfig ? 'ok' : 'espera'}`}>
+        {audienciaConfig
+          ? 'Configurado — META_MARKETING_TOKEN e META_AUDIENCE_ABANDONADOS_ID definidas.'
+          : 'Não configurado. Sem META_MARKETING_TOKEN e META_AUDIENCE_ABANDONADOS_ID no ambiente, ninguém é enviado ao público — o resto do funil segue funcionando normalmente.'}
+      </div>
+
+      {erroPublico ? (
+        <p className="secretaria-vazio">
+          A contagem ainda não está disponível — provavelmente a migration <code>0012_meta_publico_membros</code> não
+          foi aplicada neste banco ainda.
+        </p>
+      ) : (
+        <div className="secretaria-resumo">
+          <div><strong>{noPublicoAgora ?? 0}</strong><span>no público agora</span></div>
+          <div><strong>{jaRemovidos ?? 0}</strong><span>removidos por já ter pago</span></div>
+        </div>
+      )}
+
+      {audienciaConfig && (
+        <form method="post" action="/secretaria/meta-audiencia/sincronizar">
+          <button className="text-button" type="submit">Sincronizar agora, sem esperar o cron</button>
+        </form>
+      )}
+
+      <details className="secretaria-contrato">
+        <summary>Como configurar</summary>
+        <p>
+          Gere um token da Marketing API com permissão <code>ads_management</code> (Configurações do Negócio →
+          Usuários do sistema) e salve em <code>META_MARKETING_TOKEN</code>. Depois, rode o formulário abaixo uma
+          única vez com o ID da conta de anúncios (<code>act_...</code>) para criar o público — o id retornado vai
+          em <code>META_AUDIENCE_ABANDONADOS_ID</code>.
+        </p>
+        {!audienciaConfig && (
+          <form method="post" action="/secretaria/meta-audiencia/criar" className="secretaria-entrada-inline">
+            <label htmlFor="adAccountId">ID da conta de anúncios</label>
+            <input id="adAccountId" name="adAccountId" type="text" placeholder="act_123456789" required />
+            <button className="text-button" type="submit">Criar público (rodar uma vez só)</button>
+          </form>
+        )}
+        <p>
+          Depois de configurado, o cron diário (<code>vercel.json</code>) chama{' '}
+          <code>POST /api/meta-audiencia/sync</code>, protegido por <code>CRON_SECRET</code>. O e-mail e o telefone
+          vão com o mesmo hash SHA-256 usado na Conversions API.
         </p>
       </details>
     </section>

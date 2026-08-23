@@ -1,3 +1,6 @@
 {
-  "regions": ["gru1"]
+  "regions": ["gru1"],
+  "crons": [
+    { "path": "/api/meta-audiencia/sync", "schedule": "0 9 * * *" }
+  ]
 }

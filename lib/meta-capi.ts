@@ -1,6 +1,6 @@
-import { createHash } from 'node:crypto'
 import { after } from 'next/server'
 import { type Etapa, ETAPAS, type NomeDaEtapa } from '@/lib/etapas-funil'
+import { hash, nomeESobrenome, semAcentos, telefoneInternacional } from '@/lib/meta-hash'
 import { PIXEL_ID } from '@/lib/pixel-id'
 import { siteUrl } from '@/lib/site-url'
 import { supabaseServer } from '@/lib/supabase/server'
@@ -63,18 +63,6 @@ export function contextoDoNavegador(request: Request): Contexto {
   }
 }
 
-const hash = (valor: string) => createHash('sha256').update(valor.trim().toLowerCase()).digest('hex')
-
-// Acento derruba a correspondência por cidade ("São Paulo" x "Sao Paulo") —
-// o Meta pede o texto normalizado antes do hash, e só para cidade isso
-// costuma variar entre as fontes.
-const semAcentos = (valor: string) => valor.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-
-function nomeESobrenome(nomeCompleto: string) {
-  const [primeiro, ...resto] = nomeCompleto.trim().split(/\s+/)
-  return { primeiro, sobrenome: resto.join(' ') || null }
-}
-
 type DadosDaInscricao = { nome: string; cpf: string; telefone: string; email: string | null }
 type Endereco = { cidade: string | null; uf: string | null; cep: string | null }
 
@@ -83,7 +71,10 @@ function montarUserData(inscricao: DadosDaInscricao, contexto?: Contexto, endere
   return {
     // Hash sempre em minúsculo e sem espaço nas pontas — é a exigência do Meta.
     external_id: hash(inscricao.cpf),
-    ph: hash(inscricao.telefone),
+    // `telefone` é gravado sem o código do país (só DDD + número) — o Meta
+    // exige o país na frente do hash, senão nunca bate com o telefone que
+    // ele coletou em qualquer outro lugar já com o "55".
+    ph: hash(telefoneInternacional(inscricao.telefone)),
     ...(inscricao.email ? { em: hash(inscricao.email) } : {}),
     fn: hash(primeiro),
     ...(sobrenome ? { ln: hash(sobrenome) } : {}),

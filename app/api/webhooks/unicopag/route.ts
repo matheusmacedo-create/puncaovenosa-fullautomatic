@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { corpo, erro, rota } from '@/lib/http'
 import { traduzirStatus } from '@/lib/pagamento-status'
 import { enviarConversaoMeta } from '@/lib/meta-capi'
+import { removerDoPublicoDeAbandono } from '@/lib/meta-audiencia'
 import { espelharNaPlanilha } from '@/lib/planilha'
 import { supabaseServer } from '@/lib/supabase/server'
 import { consultarTransacao } from '@/lib/unicopag'
@@ -78,6 +79,7 @@ export function POST(request: Request) {
         // navegador do aluno — passar o IP/user-agent daqui envenenaria a
         // correspondência avançada no Meta em vez de melhorá-la.
         enviarConversaoMeta(pagamento.inscricao_id, 'pago', { pagamentoId: pagamento.id })
+        removerDoPublicoDeAbandono(pagamento.inscricao_id)
       }
       return NextResponse.json({ ok: true, status, jaConfirmado: data.ja_confirmado })
     }

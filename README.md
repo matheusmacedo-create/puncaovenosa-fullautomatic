@@ -255,6 +255,16 @@ Configurado por `META_CAPI_TOKEN` (gerado no Gerenciador de Eventos → Configur
 
 Nunca lança — Meta fora do ar ou token vencido não podem derrubar uma inscrição — e toda tentativa, sucesso ou falha, fica gravada em `meta_capi_entregas` (migration `0010`). É o que o bloco "Checkpoint do Pixel" em `/secretaria` lê, com reenvio manual para quem falhou.
 
+O hash de `ph` (telefone) usa `telefoneInternacional()` (`lib/meta-hash.ts`), que prefixa o "55" antes de hashar — `inscricoes.telefone` é gravado só com DDD + número. Sem o país, o hash nunca bate com o telefone que o Meta coletou em qualquer outro lugar já com o código do país.
+
+### Público de remarketing
+
+`lib/meta-audiencia.ts` sobe, com hash, quem preencheu nome/telefone/e-mail no funil e não pagou depois de 2h (`JANELA_DE_ABANDONO_HORAS`) para um público personalizado do Meta — para anunciar de novo só para quem ficou pelo caminho, em vez de continuar mostrando anúncio de topo de funil para todo mundo.
+
+A adição é em lote, 1x por dia: `POST /api/meta-audiencia/sync`, chamada pelo cron da Vercel (`vercel.json`) e protegida por `CRON_SECRET` (a Vercel manda automaticamente `Authorization: Bearer $CRON_SECRET` nas chamadas do cron quando a variável está definida). Uma vez por dia é o limite do plano Hobby — o Pro libera de hora em hora. A remoção é o oposto: em **tempo real**, chamada do mesmo ponto onde já disparamos o evento `pago` da Conversions API (`removerDoPublicoDeAbandono`), porque continuar pagando anúncio de remarketing para quem já comprou é dinheiro jogado fora. `meta_publico_membros` (migration `0012`) registra quem já foi enviado — impede duplicar no lote diário — e quem já foi removido; a mesma rotina diária também varre (`retentarRemocoesPendentes`) quem pagou mas cuja remoção em tempo real falhou, como rede de segurança.
+
+O público em si é criado **uma única vez**, pelo formulário em `/secretaria` ("Checkpoint do público de remarketing" → "Criar público"), que precisa do ID da conta de anúncios (`act_...`) e devolve o id do público recém-criado — esse id vai para `META_AUDIENCE_ABANDONADOS_ID` na Vercel. Rodar esse formulário de novo cria um segundo público vazio, então é ação de configuração inicial, não parte do fluxo normal. Configurado por `META_MARKETING_TOKEN` — um token da Marketing API com permissão `ads_management`, diferente do `META_CAPI_TOKEN` (que só cobre eventos), gerado em Configurações do Negócio → Usuários do sistema.
+
 ## Pontos de integração pendentes
 
 O funil está ligado à **Únicopag** em produção. PIX e cartão criam cobrança de verdade.

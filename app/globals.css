@@ -326,6 +326,10 @@ h1,h2,h3,h4 { font-family: var(--font-archivo), sans-serif; letter-spacing: -.01
 .secretaria-entrada .primary-button { margin-top: 8px; }
 .secretaria-erro { color: var(--cvb-red); font-size: 13px; font-weight: 650; margin: 0; }
 
+.secretaria-entrada-inline { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 10px 0; }
+.secretaria-entrada-inline label { font-size: 13px; font-weight: 650; }
+.secretaria-entrada-inline input { min-height: 40px; padding: 8px 12px; border: 1px solid var(--rule); border-radius: 3px; background: var(--card); font: 14px var(--font-mono); }
+
 .secretaria-resumo { display: flex; flex-wrap: wrap; gap: 0; border: 1px solid var(--rule); background: var(--card); margin-bottom: 18px; }
 .secretaria-resumo > div { flex: 1; min-width: 120px; padding: 14px 18px; display: flex; flex-direction: column; gap: 2px; }
 .secretaria-resumo > div + div { border-left: 1px solid var(--rule); }
