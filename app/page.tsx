@@ -15,6 +15,7 @@ import { FinalCTA } from '@/components/final-cta'
 import { MobileStickyCTA } from '@/components/mobile-sticky-cta'
 import { InstitutionalFooter } from '@/components/institutional-footer'
 import { DevelopmentChecklist } from '@/components/development-checklist'
+import { EngagementTracking } from '@/components/engagement-tracking'
 import { StructuredData } from '@/components/structured-data'
 import { TestPriceNotice } from '@/components/test-price-notice'
 import { VariantAssignment } from '@/components/variant-assignment'
@@ -36,6 +37,7 @@ export default async function Page({
     <>
       <StructuredData />
       <VariantAssignment requested={requested} />
+      <EngagementTracking />
       <TestPriceNotice />
       <InstitutionalHeader />
       <main className="pb-20 md:pb-0">

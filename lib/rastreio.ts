@@ -100,3 +100,22 @@ export function rastrear(etapa: NomeDaEtapa, { dados = {}, id, umaVezSo, valorCe
   enviar('trackCustom', nome, corpo, opcoesDoMeta)
   if (evento) enviar('track', evento, corpo, opcoesDoMeta)
 }
+
+/**
+ * Sinais de engajamento da landing — rolagem, tempo na página — que não são
+ * etapa do funil: não têm número, não desenham o funil de conversão em
+ * `ETAPAS`, servem só para o Meta aprender quem é visitante engajado (útil
+ * para otimização de campanha e para montar público de remarketing). Sempre
+ * dispara no máximo uma vez por sessão — rolar a página pra cima e pra baixo
+ * de novo não deveria contar como um segundo evento.
+ */
+export function rastrearEngajamento(nome: string, dados: Record<string, unknown> = {}) {
+  if (jaDisparou(`cvb-engajamento:${nome}`)) return
+
+  const corpo = { evento: nome, content_name: courseData.courseName, ...dados }
+  paraODataLayer({ event: nome, ...corpo })
+
+  const enviar = fbq()
+  if (!enviar || !PIXEL_ID) return
+  enviar('trackCustom', nome, corpo)
+}
