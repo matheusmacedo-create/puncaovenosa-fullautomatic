@@ -9,6 +9,7 @@ import { confirmacaoManualPermitida, estadoDaSimulacao } from '@/lib/simulacao'
 import { supabaseServer } from '@/lib/supabase/server'
 import { siteUrl, urlDoWebhook } from '@/lib/site-url'
 import { consultarSaldo, UnicopagErro } from '@/lib/unicopag'
+import { webhookSecretariaConfigurado } from '@/lib/webhook-secretaria'
 
 /**
  *Check-up da configuração, para diagnosticar um ambiente onde não dá para
@@ -117,6 +118,8 @@ export function GET(request: Request) {
       postback: await estadoDoPostback(),
       // Opcional: sem ela o funil funciona igual, só não espelha na planilha.
       planilha: { configurada: planilhaConfigurada() },
+      // Também opcional: sem as duas variáveis, nenhum evento é enviado.
+      webhookSecretaria: { configurada: webhookSecretariaConfigurado() },
       // Também opcional: sem senha, /secretaria responde 404.
       secretaria: estadoDaSecretaria(),
       // Também opcional: sem ID, nenhum pixel fictício é instalado.

@@ -4,6 +4,7 @@ import { espelharNaPlanilha } from '@/lib/planilha'
 import { lerInscricaoId } from '@/lib/session'
 import { confirmacaoManualPermitida } from '@/lib/simulacao'
 import { supabaseServer } from '@/lib/supabase/server'
+import { notificarSecretaria } from '@/lib/webhook-secretaria'
 
 type Payload = { pagamentoId?: string }
 
@@ -56,7 +57,10 @@ export function POST(request: Request) {
       return erro('Não foi possível confirmar o pagamento.', 502)
     }
 
-    if (!data.ja_confirmado) espelharNaPlanilha(inscricaoId)
+    if (!data.ja_confirmado) {
+      espelharNaPlanilha(inscricaoId)
+      notificarSecretaria(inscricaoId, 'pagamento_confirmado')
+    }
     return NextResponse.json({
       numeroInscricao: data.numero_inscricao,
       jaConfirmado: data.ja_confirmado,

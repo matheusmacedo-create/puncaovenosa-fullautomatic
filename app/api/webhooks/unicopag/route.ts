@@ -4,6 +4,7 @@ import { traduzirStatus } from '@/lib/pagamento-status'
 import { espelharNaPlanilha } from '@/lib/planilha'
 import { supabaseServer } from '@/lib/supabase/server'
 import { consultarTransacao } from '@/lib/unicopag'
+import { notificarSecretaria } from '@/lib/webhook-secretaria'
 
 /**
  * A criação de cobrança no cartão leva por volta de 11 segundos na Únicopag,
@@ -69,7 +70,10 @@ export function POST(request: Request) {
       }
       // Só na transição: o provedor pode reenviar o mesmo aviso, e a planilha
       // não precisa ser reescrita a cada repetição.
-      if (!data.ja_confirmado) espelharNaPlanilha(pagamento.inscricao_id)
+      if (!data.ja_confirmado) {
+        espelharNaPlanilha(pagamento.inscricao_id)
+        notificarSecretaria(pagamento.inscricao_id, 'pagamento_confirmado')
+      }
       return NextResponse.json({ ok: true, status, jaConfirmado: data.ja_confirmado })
     }
 
@@ -84,7 +88,10 @@ export function POST(request: Request) {
         .select('id')
       if (error) console.error('[funil] webhook: atualização falhou:', error)
       // Recusa e expiração também interessam a quem acompanha pela planilha.
-      else if (atualizados?.length) espelharNaPlanilha(pagamento.inscricao_id)
+      else if (atualizados?.length) {
+        espelharNaPlanilha(pagamento.inscricao_id)
+        notificarSecretaria(pagamento.inscricao_id, 'pagamento_falhou')
+      }
     }
 
     return NextResponse.json({ ok: true, status })

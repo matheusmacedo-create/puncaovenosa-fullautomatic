@@ -3,6 +3,7 @@ import { triageQuestions } from '@/lib/enrollment'
 import { corpo, erro, rota } from '@/lib/http'
 import { lerInscricaoId } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabase/server'
+import { notificarSecretaria } from '@/lib/webhook-secretaria'
 
 type Payload = { passo?: number; resposta?: unknown }
 
@@ -66,6 +67,8 @@ export function PUT(request: Request) {
     const { data: concluida } = await supabase.rpc('concluir_triagem_se_completa', {
       p_inscricao_id: inscricaoId,
     })
+
+    if (concluida === true) notificarSecretaria(inscricaoId, 'triagem_concluida')
 
     return NextResponse.json({ salvo: true, concluida: concluida === true })
   })

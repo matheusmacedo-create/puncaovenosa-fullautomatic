@@ -145,7 +145,10 @@ function CepQuestion({
         if (cancelado) return
         setBusca({ estado: 'achou', lugar: resumoDoEndereco(endereco) })
         setError('')
-        save({ cep: endereco.cep, bairro: endereco.bairro, cidade: endereco.cidade, uf: endereco.uf } as never)
+        save({
+          cep: endereco.cep, bairro: endereco.bairro, cidade: endereco.cidade, uf: endereco.uf,
+          latitude: endereco.latitude, longitude: endereco.longitude,
+        } as never)
       })
       .catch((e: unknown) => {
         if (cancelado) return
@@ -187,7 +190,10 @@ function CepQuestion({
     setPesquisa({ estado: 'parado' })
     setBusca({ estado: 'achou', lugar: resumoDoEndereco(endereco) })
     setError('')
-    save({ cep: endereco.cep, bairro: endereco.bairro, cidade: endereco.cidade, uf: endereco.uf } as never)
+    save({
+      cep: endereco.cep, bairro: endereco.bairro, cidade: endereco.cidade, uf: endereco.uf,
+      latitude: endereco.latitude, longitude: endereco.longitude,
+    } as never)
   }
 
   const seguir = () => {
