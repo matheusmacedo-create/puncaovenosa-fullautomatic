@@ -32,6 +32,19 @@ Cada cobrança grava sua própria composição na coluna `pagamentos.itens`, e u
 
 Cobrar apenas a matrícula é aceito pelo modelo, mas **não está implementado no funil** — fica disponível para um downsell futuro.
 
+## Atribuição e teste A/B
+
+`lib/ab-test.ts` sorteia 50/50 entre a variante `a` e a `b` da landing e guarda a escolha em cookie e `localStorage` por 90 dias, para o visitante ver sempre a mesma. O que faltava era medir: `visitas_landing` gravava a variante, mas `inscricoes` não — dava para contar "a B teve 100 visitas" e era impossível saber se ela converteu melhor. O teste rodava cego, gastando metade do tráfego pago sem produzir resposta.
+
+A migration `0013` fecha isso: `inscricoes` também guarda `variante`, `utm_source`, `utm_medium` e `utm_campaign`, e `funil_por_origem(p_dimensao)` cruza as duas tabelas para devolver visita → inscrição → paga → matriculada por variante ou por UTM. É o bloco "O que converte" em `/secretaria`, com as duas taxas que importam: **% entrou** (de quem viu, quantos começaram a se inscrever — isola a página) e **% pagou** (ponta a ponta — o número de dinheiro). Uma variante pode ganhar na primeira e perder na segunda, e só as duas juntas mostram isso.
+
+A atribuição é de **primeiro toque**: quem voltou por um segundo anúncio e concluiu ali continua creditado a quem o trouxe da primeira vez. Sem isso, o remarketing apareceria como o melhor anúncio da conta — ele só reencontra gente que outro anúncio já pagou para atrair. No SQL é o `coalesce(i.variante, excluded.variante)` do `upsert_inscricao`, o inverso do que o e-mail faz.
+
+Duas armadilhas que já custaram dado, ambas resolvidas e fáceis de reintroduzir:
+
+- **Ler a variante com `currentVariant()` para atribuir.** Ela devolve `'a'` quando não há variante nenhuma, o que é certo para rotular um evento e errado para creditar uma venda: quem entra direto em `/inscricao` pelo anúncio nunca viu a landing, e viraria uma conversão da A sem a visita correspondente — a A pareceria converter melhor por causa de quem nunca a viu. Para atribuir, use `varianteConhecida()`, que devolve `null`.
+- **Trocar de etapa reescrevendo a URL.** `go()` (`components/enrollment-flow.tsx`) fazia `?etapa=X` puro e apagava as UTMs. A variante sobrevivia por estar em cookie; a campanha só existe na URL, então a venda chegava sem origem. Preserve a query e troque só `etapa`.
+
 ## Páginas legais
 
 `/politica-de-privacidade` e `/politica-de-reembolso` (`app/politica-de-privacidade/page.tsx`, `app/politica-de-reembolso/page.tsx`, moldura comum em `components/legal-page.tsx`) são páginas estáticas, fora do funil. `lib/course-data.ts` aponta `privacyPolicyUrl`/`refundPolicyUrl` para elas — é o que faz o link aparecer no rodapé da landing (`components/institutional-footer.tsx`) em vez do aviso de pendência; ficando `null`, some. O mesmo par de links aparece de novo dentro do funil, logo abaixo do `PriceBreakdown`, na etapa de dados e na de pagamento (`LegalNote` em `components/enrollment-flow.tsx`) — é o ponto onde o aluno está prestes a pagar, não só o rodapé da landing, que ele pode nunca ter visto ao entrar direto pelo anúncio. O conteúdo da política de privacidade segue o termo de tratamento de dados da própria Cruz Vermelha Brasileira (LGPD, Lei nº 13.709/2018), adaptado ao que este formulário realmente coleta. O de reembolso cobre o direito de arrependimento de 7 dias corridos do art. 49 do CDC — o prazo de "5 dias úteis" para processar a devolução ali é um valor operacional, não legal; ajuste se a secretaria trabalhar com outro prazo.

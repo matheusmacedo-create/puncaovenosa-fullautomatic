@@ -16,13 +16,50 @@ const TRACKED_PARAMS = [
   'gclid',
 ]
 
-/** Variante ativa do visitante, usada em todos os eventos. */
-export function currentVariant(): Variant {
-  if (typeof window === 'undefined') return 'a'
+/**
+ * Variante já atribuída a este visitante, ou `null` quando não há nenhuma.
+ *
+ * Separado de `currentVariant()` porque os dois usos querem coisas opostas na
+ * ausência de variante: um evento precisa de um rótulo (daí o 'a' padrão), mas
+ * a atribuição da inscrição precisa da verdade. Quem entra direto em
+ * `/inscricao` pelo anúncio nunca viu a landing — gravar 'a' nesse caso somaria
+ * uma conversão à variante A sem a visita correspondente, e a A pareceria
+ * converter melhor só por causa de quem nunca a viu.
+ */
+function varianteConhecida(): Variant | null {
+  if (typeof window === 'undefined') return null
   const fromUrl = normalizeVariant(new URLSearchParams(window.location.search).get('variant'))
   if (fromUrl) return fromUrl
   const match = document.cookie.match(new RegExp(`(?:^|; )${VARIANT_COOKIE}=([^;]*)`))
-  return normalizeVariant(match?.[1] ?? null) ?? 'a'
+  return normalizeVariant(match?.[1] ?? null)
+}
+
+/** Variante ativa do visitante, usada em todos os eventos. */
+export function currentVariant(): Variant {
+  return varianteConhecida() ?? 'a'
+}
+
+export type Atribuicao = {
+  variante?: string
+  utmSource?: string
+  utmMedium?: string
+  utmCampaign?: string
+}
+
+/**
+ * De onde veio este visitante, no formato que `visitas_landing` e
+ * `inscricoes` gravam. Fonte única das duas pontas: é o que permite cruzar
+ * "quantos viram" com "quantos pagaram" pela mesma chave.
+ */
+export function atribuicaoAtual(variante = varianteConhecida()): Atribuicao {
+  if (typeof window === 'undefined') return {}
+  const utms = currentUtms()
+  return {
+    variante: variante ?? undefined,
+    utmSource: utms.utm_source,
+    utmMedium: utms.utm_medium,
+    utmCampaign: utms.utm_campaign,
+  }
 }
 
 /** UTMs presentes na URL atual, repassadas aos eventos e ao checkout. */
@@ -73,13 +110,7 @@ export function trackLandingView(variant: Variant) {
   // Espelha no nosso banco: é o único jeito de "quantas visitas viraram
   // inscrição" aparecer em /secretaria — o pixel do Meta conta PageView do
   // lado dele, mas essa contagem não existe em lugar nenhum nosso sem isto.
-  const utms = currentUtms()
-  registrarVisita({
-    variante: variant,
-    utmSource: utms.utm_source,
-    utmMedium: utms.utm_medium,
-    utmCampaign: utms.utm_campaign,
-  }).catch(() => undefined)
+  registrarVisita(atribuicaoAtual(variant)).catch(() => undefined)
 }
 
 /**

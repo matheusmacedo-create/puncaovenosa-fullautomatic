@@ -7,6 +7,7 @@ import { ClinicalHeader, RedCross } from '@/components/clinical-header'
 import { CodigoQr } from '@/components/qr-code'
 import { CardForm } from '@/components/card-form'
 import { PriceBreakdown } from '@/components/price-breakdown'
+import { atribuicaoAtual } from '@/lib/checkout'
 import { courseData } from '@/lib/course-data'
 import {
   CARTAO_VAZIO, DadosCartao, digits, EnrollmentData, fieldError, formatarBRL,
@@ -59,7 +60,20 @@ export function EnrollmentFlow() {
     return () => window.clearInterval(id)
   }, [])
 
-  const go = useCallback((next: Stage) => router.push(`${ROTA_INSCRICAO}?etapa=${next}`), [router])
+  /**
+   * Troca de etapa preservando o resto da URL.
+   *
+   * Reescrever para `?etapa=X` puro apagava as UTMs: quem entra direto em
+   * `/inscricao` pelo anúncio (sem `etapa` na URL) e clica em "Abrir
+   * inscrição" chegava ao cadastro sem campanha nenhuma, e a venda ficava sem
+   * origem. A variante sobrevivia por estar em cookie; a campanha só existe
+   * na URL.
+   */
+  const go = useCallback((next: Stage) => {
+    const params = new URLSearchParams(search.toString())
+    params.set('etapa', next)
+    router.push(`${ROTA_INSCRICAO}?${params}`)
+  }, [router, search])
 
   /**
    * Etapa 5: dinheiro confirmado. O `id` da cobrança vira `eventID` do Meta,
@@ -109,7 +123,10 @@ export function EnrollmentFlow() {
     if (Object.values(nextErrors).some(Boolean)) return
     setEnviando(true); setErroGeral('')
     try {
-      const salva = await salvarInscricao(data)
+      // A variante e a campanha só existem no navegador (URL e cookie), e este
+      // é o último momento em que dá para lê-las: da etapa de pagamento em
+      // diante nada mais grava na inscrição.
+      const salva = await salvarInscricao(data, atribuicaoAtual())
       // Etapa 3: nome, CPF e e-mail entregues. É o Lead do funil — daqui a
       // secretaria já consegue falar com a pessoa, tenha ela pago ou não.
       rastrear('dados', { id: salva.id, umaVezSo: true })

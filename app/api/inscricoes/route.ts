@@ -7,7 +7,19 @@ import { gravarInscricaoId } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabase/server'
 import { notificarSecretaria } from '@/lib/webhook-secretaria'
 
-type Payload = { name?: string; phone?: string; cpf?: string; email?: string; highSchool?: boolean }
+type Payload = {
+  name?: string; phone?: string; cpf?: string; email?: string; highSchool?: boolean
+  variante?: string; utmSource?: string; utmMedium?: string; utmCampaign?: string
+}
+
+/**
+ * A atribuição é rótulo de relatório, não dado de negócio: vem da URL, então
+ * qualquer um pode escrever o que quiser nela. Cortar no tamanho evita que um
+ * link forjado encha a coluna — e nada aqui é validado além disso de
+ * propósito, porque uma UTM inesperada tem que aparecer no painel como veio,
+ * não virar erro que impede a matrícula.
+ */
+const rotulo = (valor?: string) => valor?.trim().slice(0, 120) || null
 
 /**
  * Cria ou atualiza a inscrição a partir do CPF e abre a sessão do funil.
@@ -41,6 +53,10 @@ export function POST(request: Request) {
         p_telefone: digits(dados.phone),
         p_ensino_medio: dados.highSchool,
         p_email: dados.email,
+        p_variante: rotulo(body.variante),
+        p_utm_source: rotulo(body.utmSource),
+        p_utm_medium: rotulo(body.utmMedium),
+        p_utm_campaign: rotulo(body.utmCampaign),
       })
       .single<{ id: string; status: string; numero_inscricao: string | null; ja_paga: boolean }>()
 
