@@ -210,6 +210,19 @@ Oito etapas nomeadas, uma por trecho real do funil, definidas num lugar só (`li
 | 7 | `funil_7_triagem_fim` | As 8 perguntas foram respondidas | `CompleteRegistration` |
 | 8 | `funil_8_ficha` | Abriu a ficha do aluno, com a vaga já garantida | — |
 
+`PageView` dispara à parte, direto do script do pixel em `components/meta-pixel.tsx`, condicionado a não estar dentro do iframe do checkout (senão landing e funil contariam a visita duas vezes).
+
+### Sinais de engajamento (fora do funil)
+
+`components/engagement-tracking.tsx`, montado só na landing (`app/page.tsx`), dispara eventos que não são etapa de conversão — não têm número, não aparecem em `ETAPAS`, servem para o Meta identificar visitante engajado e montar público de remarketing pra quem nunca chega a clicar em nada:
+
+| Evento | Quando |
+| --- | --- |
+| `scroll_25` / `scroll_50` / `scroll_75` / `scroll_90` | A rolagem passa de cada marco, uma vez por sessão |
+| `tempo_30s` | 30 segundos na página, só se a aba estava visível nesse instante — não afirma engajamento de quem trocou de aba |
+
+Via `rastrearEngajamento()` em `lib/rastreio.ts`, que é a mesma máquina do `rastrear()` das 8 etapas (dataLayer + `trackCustom` do Meta, dedupe por `sessionStorage`), só que sem `eventID`: estes eventos não têm uma escrita no banco para ancorar um `event_id` compartilhado com a Conversions API, então não passam por `lib/meta-capi.ts` — só o pixel do navegador mesmo.
+
 A numeração no nome não é enfeite: o gerenciador do Meta lista eventos em ordem alfabética, e sem ela `funil_pago` apareceria antes de `funil_dados`.
 
 Sem `NEXT_PUBLIC_META_PIXEL_ID`, nada disto instala nenhum script — nem o pixel, nem um ID fictício. A leitura da variável vive isolada em `lib/pixel-id.ts`, fora de `lib/rastreio.ts` (que é `'use client'`): o componente que injeta o script (`components/meta-pixel.tsx`) é renderizado por `app/layout.tsx`, um Server Component, e um Server Component que importa uma constante de um módulo `'use client'` não pega o valor real — pega uma referência que o bundler não resolve fora do cliente, e ela chega serializada como texto de erro. Foi exatamente esse bug: com o ID vindo de `lib/rastreio.ts`, `!PIXEL_ID` dava falso mesmo sem variável nenhuma configurada, e o pixel era instalado do mesmo jeito.
