@@ -24,8 +24,10 @@ export type Endereco = {
   bairro: string | null
   cidade: string | null
   uf: string | null
-  // Só a BrasilAPI devolve isto, e nem sempre — muitos CEPs não têm
-  // coordenada nas fontes que ela consulta por baixo. A ViaCEP nunca devolve.
+  // Nenhuma das duas fontes de CEP devolve coordenada confiável — a ViaCEP
+  // nunca devolve, e a BrasilAPI já devolveu a mesma coordenada errada pra
+  // dois bairros diferentes (ver comentário em `pelaBrasilApi`). Sempre nulo
+  // aqui: quem precisa de coordenada usa `coordenadaAproximada` (por bairro).
   latitude: number | null
   longitude: number | null
 }
@@ -176,14 +178,6 @@ type RespostaBrasilApi = {
   neighborhood?: string
   city?: string
   state?: string
-  location?: { coordinates?: { longitude?: string; latitude?: string } }
-}
-
-/** As duas vêm como string, e vazias quando a fonte não tem a coordenada — nunca "0". */
-function numeroOuNulo(valor: string | undefined): number | null {
-  if (!valor) return null
-  const n = Number(valor)
-  return Number.isFinite(n) && n !== 0 ? n : null
 }
 
 async function pelaBrasilApi(cepEmDigitos: string): Promise<Endereco> {
@@ -207,8 +201,16 @@ async function pelaBrasilApi(cepEmDigitos: string): Promise<Endereco> {
     bairro: dados.neighborhood || null,
     cidade: dados.city || null,
     uf: dados.state || null,
-    latitude: numeroOuNulo(dados.location?.coordinates?.latitude),
-    longitude: numeroOuNulo(dados.location?.coordinates?.longitude),
+    // A BrasilAPI v2 tem um campo `location.coordinates`, mas não dá pra
+    // confiar nele: testado ao vivo, ela devolveu a MESMA coordenada para
+    // dois CEPs de bairros diferentes (São Cristóvão e Jacaré, a alguns km
+    // de distância) — um dos provedores internos que ela consulta ("open-
+    // cep") retorna um ponto genérico em vez de recusar quando não tem o
+    // dado real. Melhor não ter coordenada nenhuma do que ter uma errada:
+    // a aproximada por bairro via Nominatim (`coordenadaAproximada`,
+    // chamada em `PUT /api/triagem`) é a única fonte confiável hoje.
+    latitude: null,
+    longitude: null,
   }
 }
 

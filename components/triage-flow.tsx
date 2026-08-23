@@ -261,13 +261,23 @@ function CepQuestion({
 function EmailQuestion({ value, save, next }: { value: string; save: (v: string) => void; next: () => void }) {
   const [error, setError] = useState('')
   const valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
+  // Avançar sem nunca ter digitado nada não chama `onChange`, então sem este
+  // `save(value)` explícito o passo 6 nunca grava resposta nenhuma — e sem os
+  // 8 passos gravados, a triagem nunca fecha. Foi exatamente isso: como o
+  // e-mail já foi pedido na etapa de dados, quem clica "sem e-mail" aqui
+  // (a maioria) travava a matrícula pra sempre em "paga", nunca "completa".
+  const seguir = () => {
+    if (value && !valid) { setError('Digite um e-mail válido ou deixe o campo vazio.'); return }
+    save(value)
+    next()
+  }
   return <div className="field triage-input">
     <p className="question-support">Você deseja salvar um e-mail para solicitar uma segunda via ou receber ajuda com o certificado, caso precise?</p>
     <label htmlFor="email">E-mail <span>(opcional)</span></label>
-    <input id="email" type="email" inputMode="email" autoComplete="email" placeholder="voce@exemplo.com" value={value} onChange={e => { save(e.target.value); setError('') }} onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && e.keyCode !== 229) { if (!value || valid) next(); else setError('Digite um e-mail válido ou deixe o campo vazio.') } }} aria-invalid={!!error} />
+    <input id="email" type="email" inputMode="email" autoComplete="email" placeholder="voce@exemplo.com" value={value} onChange={e => { save(e.target.value); setError('') }} onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && e.keyCode !== 229) seguir() }} aria-invalid={!!error} />
     {error && <p className="error">{error}</p>}
     <div className="triage-actions">
-      <button className="primary-button full" onClick={() => !value || valid ? next() : setError('Digite um e-mail válido ou deixe o campo vazio.')}>{value ? 'Salvar e continuar' : 'Continuar sem e-mail'}</button>
+      <button className="primary-button full" onClick={seguir}>{value ? 'Salvar e continuar' : 'Continuar sem e-mail'}</button>
     </div>
   </div>
 }
