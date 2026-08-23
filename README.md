@@ -32,9 +32,15 @@ Cada cobrança grava sua própria composição na coluna `pagamentos.itens`, e u
 
 Cobrar apenas a matrícula é aceito pelo modelo, mas **não está implementado no funil** — fica disponível para um downsell futuro.
 
-## Atribuição e teste A/B
+## Páginas de venda e atribuição
 
-`lib/ab-test.ts` sorteia 50/50 entre a variante `a` e a `b` da landing e guarda a escolha em cookie e `localStorage` por 90 dias, para o visitante ver sempre a mesma. O que faltava era medir: `visitas_landing` gravava a variante, mas `inscricoes` não — dava para contar "a B teve 100 visitas" e era impossível saber se ela converteu melhor. O teste rodava cego, gastando metade do tráfego pago sem produzir resposta.
+Cada página de venda tem **endereço próprio**, para colar no anúncio: `/` serve a padrão e `/lp/[slug]` serve as demais. O registro é `lib/paginas-de-venda.ts` — uma entrada por página, com a chave curta que vai para o banco (`a`, `b`), o slug da URL e o nome legível. Acrescentar uma página é uma entrada ali e a copy em `lib/headlines.ts`: a rota, o tipo `Variant` e a quebra do funil em `/secretaria` seguem sozinhas.
+
+Quem decide qual página a pessoa vê é o link do anúncio, não um sorteio. Havia um sorteio 50/50 no cliente e ele **invalidava a própria medição**: o servidor sempre renderizava a `a` e, caindo `b`, o navegador dava um `location.replace` e recarregava tudo. A `b` pagava um carregamento inteiro a mais antes de aparecer, e como a visita só era contada depois do recarregamento, quem desistia no meio não entrava em nenhuma das duas contas — a `b` perdia gente de verdade e ao mesmo tempo parecia converter melhor, porque o denominador dela encolhia. `/?variant=b` continua funcionando para não quebrar anúncio já publicado.
+
+As páginas em `/lp/*` são `noindex` (com canônica para `/`): são quase idênticas entre si e à principal, e deixá-las indexáveis faria o Google escolher qual mostrar, competindo com `/` em vez de somar. Como destino de anúncio, ser indexável não faz falta.
+
+Medir exigia as duas pontas. `visitas_landing` gravava a página vista, mas `inscricoes` não — dava para contar "a B teve 19 visitas" e era impossível saber se ela converteu melhor.
 
 A migration `0013` fecha isso: `inscricoes` também guarda `variante`, `utm_source`, `utm_medium` e `utm_campaign`, e `funil_por_origem(p_dimensao)` cruza as duas tabelas para devolver visita → inscrição → paga → matriculada por variante ou por UTM. É o bloco "O que converte" em `/secretaria`, com as duas taxas que importam: **% entrou** (de quem viu, quantos começaram a se inscrever — isola a página) e **% pagou** (ponta a ponta — o número de dinheiro). Uma variante pode ganhar na primeira e perder na segunda, e só as duas juntas mostram isso.
 

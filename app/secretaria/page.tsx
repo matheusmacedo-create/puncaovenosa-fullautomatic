@@ -4,6 +4,7 @@ import { SecretariaMapa, type PontoMapa } from '@/components/secretaria-mapa'
 import { coordsDaResposta, resumoDaResposta } from '@/lib/cep'
 import { formatarBRL, maskCpf, maskPhone, triageQuestions } from '@/lib/enrollment'
 import { metaCapiConfigurado } from '@/lib/meta-capi'
+import { CHAVES, PAGINAS, caminhoDaPagina } from '@/lib/paginas-de-venda'
 import { audienciaConfigurada, JANELA_DE_ABANDONO_HORAS } from '@/lib/meta-audiencia'
 import { secretariaAutenticada, secretariaHabilitada } from '@/lib/secretaria'
 import { supabaseServer } from '@/lib/supabase/server'
@@ -100,6 +101,11 @@ type LinhaDeOrigem = {
 
 /** Percentual só quando o denominador existe: 0 de 0 não é 0%, é nada a dizer. */
 const pct = (parte: number, todo: number) => (todo > 0 ? `${Math.round((parte / todo) * 100)}%` : '—')
+
+// A chave gravada no banco é curta (`a`, `b`); quem lê o painel quer o nome.
+const ROTULOS_DAS_PAGINAS = Object.fromEntries(
+  CHAVES.map(chave => [chave, { nome: PAGINAS[chave].nome, caminho: caminhoDaPagina(chave) }]),
+)
 
 const dataHora = (iso: string) =>
   new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Sao_Paulo' })
@@ -338,15 +344,16 @@ export default async function SecretariaPage({
 
     {!erroOrigem && (
       <section className="secretaria-bloco">
-        <h2>O que converte — por variante e por campanha</h2>
+        <h2>O que converte — por página e por campanha</h2>
         <p className="secretaria-bloco-legenda">
           O mesmo funil de cima, quebrado por origem. É o que responde qual página vende e qual anúncio traz
-          gente que paga — e não só gente que clica. A atribuição é de <strong>primeiro toque</strong>: quem
-          voltou por um segundo anúncio e concluiu ali continua creditado a quem o trouxe da primeira vez.
-          Quem entrou antes de 23/08/2026 aparece em <em>sem registro</em>: a inscrição só passou a guardar
-          origem a partir dessa data.
+          gente que paga — e não só gente que clica. Cada página tem endereço próprio (a coluna mostra qual):
+          quem decide o que a pessoa vê é o link do anúncio, não um sorteio. A atribuição é de{' '}
+          <strong>primeiro toque</strong> — quem voltou por um segundo anúncio e concluiu ali continua
+          creditado a quem o trouxe da primeira vez. Quem entrou antes de 23/08/2026 aparece em{' '}
+          <em>sem registro</em>: a inscrição só passou a guardar origem a partir dessa data.
         </p>
-        <FunilPorOrigem titulo="Variante da landing" rotuloDaChave="Variante" linhas={linhasPorVariante} />
+        <FunilPorOrigem titulo="Página de venda" rotuloDaChave="Página" linhas={linhasPorVariante} rotulos={ROTULOS_DAS_PAGINAS} />
         <FunilPorOrigem titulo="Campanha (utm_campaign)" rotuloDaChave="Campanha" linhas={linhasPorCampanha} />
       </section>
     )}
@@ -684,10 +691,12 @@ export default async function SecretariaPage({
  * segunda — atrair mais gente e vender menos — e só mostrando as duas dá para
  * enxergar isso.
  */
-function FunilPorOrigem({ titulo, rotuloDaChave, linhas }: {
+function FunilPorOrigem({ titulo, rotuloDaChave, linhas, rotulos }: {
   titulo: string
   rotuloDaChave: string
   linhas: LinhaDeOrigem[]
+  /** Nome legível e endereço de cada chave, quando existirem (caso das páginas). */
+  rotulos?: Record<string, { nome: string; caminho: string }>
 }) {
   return <div className="secretaria-origem">
     <h3>{titulo}</h3>
@@ -710,7 +719,10 @@ function FunilPorOrigem({ titulo, rotuloDaChave, linhas }: {
           <tbody>
             {linhas.map(l => (
               <tr key={l.chave}>
-                <td><strong>{l.chave}</strong></td>
+                <td>
+                  <strong>{rotulos?.[l.chave]?.nome ?? l.chave}</strong>
+                  {rotulos?.[l.chave] && <span className="secretaria-sub">{rotulos[l.chave].caminho}</span>}
+                </td>
                 <td>{l.visitas}</td>
                 <td>{l.inscricoes}</td>
                 <td>{l.pagas}</td>

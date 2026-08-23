@@ -1,31 +1,22 @@
 'use client'
 
 import { useEffect } from 'react'
-import { resolveClientVariant, type Variant } from '@/lib/ab-test'
+import { persistVariant, type Variant } from '@/lib/ab-test'
 import { trackLandingView } from '@/lib/checkout'
 
 /**
- * Garante que todo visitante tenha uma variante persistida.
+ * Registra a visita e guarda qual página foi vista.
  *
- * Quando a URL não traz ?variant=, o sorteio 50/50 acontece aqui e o
- * resultado é gravado em cookie e localStorage. Se o valor sorteado for
- * diferente do que o servidor renderizou, a página é reapresentada com o
- * parâmetro explícito — assim o visitante permanece na mesma variante em
- * recarregamentos e retornos, sem quebrar o cache da rota.
+ * Não sorteia e não redireciona: a página já chegou decidida pelo servidor,
+ * pelo endereço que a pessoa abriu. O sorteio no cliente que existia aqui
+ * recarregava a página inteira quando caía na variante `b` — ver
+ * `lib/paginas-de-venda.ts` para por que isso invalidava a medição.
  */
-export function VariantAssignment({ requested }: { requested: Variant | null }) {
+export function VariantAssignment({ variante }: { variante: Variant }) {
   useEffect(() => {
-    const resolved = resolveClientVariant()
-    if (!requested && resolved !== 'a') {
-      const url = new URL(window.location.href)
-      url.searchParams.set('variant', resolved)
-      window.location.replace(url.toString())
-      // A página vai recarregar: a visita é contada do outro lado, com a
-      // variante certa. Contar aqui somaria uma visita que ninguém viu.
-      return
-    }
-    trackLandingView(requested ?? resolved)
-  }, [requested])
+    persistVariant(variante)
+    trackLandingView(variante)
+  }, [variante])
 
   return null
 }
