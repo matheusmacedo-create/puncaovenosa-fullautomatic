@@ -113,6 +113,53 @@ export function resumoDaResposta(resposta: unknown): string {
 // segundo aluno do mesmo bairro.
 const CACHE_DE_UM_MES = { revalidate: 60 * 60 * 24 * 30 }
 
+/**
+ * Geocodificação aproximada por bairro/cidade, para quando o CEP não trouxe
+ * coordenada exata — a maioria dos casos: só a BrasilAPI devolve, e nem
+ * sempre, e a ViaCEP nunca devolve.
+ *
+ * Não é a rua do aluno, é o centro da área que ele informou — mas é o que
+ * basta para o mapa da secretaria ganhar um ponto em vez de deixar a
+ * inscrição de fora. Chamada pelo servidor, do mesmo jeito que o resto deste
+ * arquivo: nunca do navegador direto para o Nominatim.
+ */
+async function pelaNominatim(bairro: string | null, cidade: string | null, uf: string | null): Promise<{ latitude: number; longitude: number } | null> {
+  if (!cidade) return null
+
+  const consulta = [bairro, cidade, uf, 'Brasil'].filter(Boolean).join(', ')
+
+  try {
+    const resposta = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=br&q=${encodeURIComponent(consulta)}`,
+      {
+        // Exigido pelo termo de uso do Nominatim: sem User-Agent identificável, bloqueia.
+        headers: { 'User-Agent': 'puncaovenosa-fullautomatic (contato@cruzvermelhariodejaneiro.org)' },
+        next: CACHE_DE_UM_MES,
+        signal: AbortSignal.timeout(4_000),
+      },
+    )
+    if (!resposta.ok) return null
+
+    const dados = (await resposta.json()) as Array<{ lat?: string; lon?: string }>
+    const [primeiro] = dados
+    if (!primeiro?.lat || !primeiro?.lon) return null
+
+    const latitude = Number(primeiro.lat)
+    const longitude = Number(primeiro.lon)
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null
+
+    return { latitude, longitude }
+  } catch (e) {
+    console.error('[funil] geocodificação aproximada falhou:', e)
+    return null
+  }
+}
+
+/** Ponto de entrada único para a geocodificação aproximada — hoje só o Nominatim, mas fica isolado caso troque. */
+export function coordenadaAproximada(bairro: string | null, cidade: string | null, uf: string | null) {
+  return pelaNominatim(bairro, cidade, uf)
+}
+
 // Duas fontes em sequência não podem somar a espera de duas: 4s cada deixa o
 // pior caso em 8s, e o normal é a primeira responder em menos de um.
 const PACIENCIA = 4_000

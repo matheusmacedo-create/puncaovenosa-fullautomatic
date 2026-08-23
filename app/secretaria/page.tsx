@@ -177,12 +177,20 @@ export default async function SecretariaPage({
   const falhasDePagamento = [...ultimaCobranca.values()].filter(p => STATUS_DE_FALHA.includes(p.status)).length
   const taxaDeMatricula = total ? Math.round((completas / total) * 100) : 0
 
-  // Pontos do mapa: só quem tem coordenada gravada na resposta do passo 1.
+  // Pontos do mapa: só quem tem coordenada gravada na resposta do passo 1 —
+  // exata (BrasilAPI) ou aproximada por bairro/cidade (Nominatim, gravada em
+  // PUT /api/triagem quando a exata não veio).
   const pontosMapa: PontoMapa[] = (inscricoes ?? []).flatMap(i => {
     const passo1 = triagem.get(i.id)?.get(1)
     const coords = coordsDaResposta(passo1)
     if (!coords) return []
-    return [{ id: i.id, latitude: coords.latitude, longitude: coords.longitude, lugar: resumoDaResposta(passo1), status: i.status }]
+    return [{
+      id: i.id,
+      latitude: coords.latitude,
+      longitude: coords.longitude,
+      popup: `${resumoDaResposta(passo1)} · ${SITUACAO[i.status] ?? i.status}`,
+      criadoEm: i.criado_em,
+    }]
   })
 
   // Checkpoint do webhook: lido à parte porque a tabela só existe depois da
@@ -248,11 +256,17 @@ export default async function SecretariaPage({
     <section className="secretaria-bloco">
       <h2>De onde vêm as inscrições</h2>
       <p className="secretaria-bloco-legenda">
-        Um ponto por inscrição, na região do CEP informado na triagem — cor pelo status (verde: matriculado ou
-        pago; laranja: aguardando pagamento; cinza: só o cadastro; vermelho: cancelada). Só aparece quem tem
-        coordenada gravada: nem todo CEP tem uma, e quem respondeu a triagem antes deste mapa existir não tem.
+        Um ponto aproximado por inscrição, na região do CEP ou endereço informado na triagem — não é a rua exata,
+        é o suficiente para enxergar de onde o pessoal está vindo. A cor não é status, é tempo: verde forte para
+        quem acabou de entrar, esmaecendo para laranja conforme as semanas passam — o mapa vai "preenchendo" e dá
+        para ver de longe onde uma região ficou parada.
         {pontosMapa.length > 0 && ` Mostrando ${pontosMapa.length} de ${total} inscrições.`}
       </p>
+      <div className="secretaria-mapa-legenda">
+        <span>Recém-chegado</span>
+        <span className="secretaria-mapa-gradiente" />
+        <span>Há {'>'}8 semanas</span>
+      </div>
       <SecretariaMapa pontos={pontosMapa} />
     </section>
 
