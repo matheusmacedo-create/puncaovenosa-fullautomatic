@@ -1,4 +1,5 @@
 import { normalizeVariant, VARIANT_COOKIE, type Variant } from '@/lib/ab-test'
+import { registrarVisita } from '@/lib/api-cliente'
 import { rastrear } from '@/lib/rastreio'
 
 export type CtaPosition = 'hero' | 'content' | 'offer' | 'sticky' | 'final'
@@ -69,6 +70,16 @@ export function buildCheckoutUrl(checkoutUrl: string, position: CtaPosition) {
 export function trackLandingView(variant: Variant) {
   if (typeof window === 'undefined') return
   rastrear('landing', { dados: { variant, ...currentUtms() }, umaVezSo: true })
+  // Espelha no nosso banco: é o único jeito de "quantas visitas viraram
+  // inscrição" aparecer em /secretaria — o pixel do Meta conta PageView do
+  // lado dele, mas essa contagem não existe em lugar nenhum nosso sem isto.
+  const utms = currentUtms()
+  registrarVisita({
+    variante: variant,
+    utmSource: utms.utm_source,
+    utmMedium: utms.utm_medium,
+    utmCampaign: utms.utm_campaign,
+  }).catch(() => undefined)
 }
 
 /**

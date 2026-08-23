@@ -180,6 +180,16 @@ export default async function SecretariaPage({
   const pagas = (inscricoes ?? []).filter(i => i.status === 'paga' || i.status === 'triagem_concluida').length
   const completas = (inscricoes ?? []).filter(i => i.status === 'triagem_concluida').length
 
+  // Visitas na landing: o topo real do funil, sem inscrição nenhuma para
+  // ancorar — por isso é tabela à parte (migration 0011), não uma coluna em
+  // `inscricoes`. O pixel do Meta já conta PageView do lado dele; isto é o
+  // que faz essa contagem existir também aqui, e dá pra calcular visita →
+  // dados preenchidos, que sem isto era invisível no próprio painel.
+  const { count: visitas, error: erroVisitas } = await supabase
+    .from('visitas_landing')
+    .select('id', { count: 'exact', head: true })
+  const taxaDeEntrada = visitas ? Math.round((total / visitas) * 100) : null
+
   // Funil completo: quem entrou (total) contra quem realmente matriculou
   // (triagem_concluida) — e onde, no meio do caminho, cada um empacou.
   const rascunhos = (inscricoes ?? []).filter(i => i.status === 'rascunho').length
@@ -230,15 +240,26 @@ export default async function SecretariaPage({
 
   return <Moldura autenticado>
     <div className="secretaria-resumo">
+      {!erroVisitas && (
+        <div><strong>{visitas ?? 0}</strong><span>visitaram a landing{taxaDeEntrada !== null && ` · ${taxaDeEntrada}% preencheu os dados`}</span></div>
+      )}
       <div><strong>{total}</strong><span>entraram no funil</span></div>
       <div><strong>{pagas}</strong><span>pagaram</span></div>
       <div><strong>{completas}</strong><span>matricularam ({taxaDeMatricula}%)</span></div>
     </div>
 
+    {erroVisitas && (
+      <p className="secretaria-vazio">
+        A contagem de visitas na landing ainda não está disponível — provavelmente a migration <code>0011_visitas_landing</code> não
+        foi aplicada neste banco ainda.
+      </p>
+    )}
+
     {total > 0 && (
       <section className="secretaria-bloco">
         <h2>Funil completo — quem entrou × quem matriculou</h2>
         <p className="secretaria-bloco-legenda">
+          {!erroVisitas && visitas ? `De ${visitas} visitas na landing, ${total} preencheram os dados. ` : ''}
           De {total} que começaram, {completas} concluíram a matrícula. O resto está parado em algum ponto —
           é aqui que dá para ver onde.
         </p>

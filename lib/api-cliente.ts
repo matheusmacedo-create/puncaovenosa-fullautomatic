@@ -116,3 +116,7 @@ export const pesquisarEnderecos = (uf: string, cidade: string, logradouro: strin
   pedir<{ enderecos: Endereco[]; total: number }>(
     `/api/enderecos?uf=${encodeURIComponent(uf)}&cidade=${encodeURIComponent(cidade)}&logradouro=${encodeURIComponent(logradouro)}`,
   )
+
+/** Uma visita real à landing — o topo do funil que não tem inscrição para ancorar. Chamar sempre com `.catch()`: nunca deve atrapalhar a navegação de quem visita. */
+export const registrarVisita = (dados: { variante?: string; utmSource?: string; utmMedium?: string; utmCampaign?: string }) =>
+  pedir<{ ok: boolean }>('/api/visitas', { method: 'POST', body: JSON.stringify(dados) })
