@@ -1,6 +1,7 @@
 'use client'
 
 import type { Endereco } from '@/lib/cep'
+import type { Atribuicao } from '@/lib/checkout'
 import { EnrollmentData, PagamentoMetodo, PagamentoStatus } from '@/lib/enrollment'
 
 /**
@@ -59,10 +60,15 @@ async function pedir<T>(url: string, init?: RequestInit): Promise<T> {
   return corpo as T
 }
 
-export const salvarInscricao = (dados: EnrollmentData) =>
+/**
+ * A atribuição vai junto do cadastro, e não numa chamada à parte: é o
+ * primeiro momento em que existe uma inscrição para ancorá-la, e uma segunda
+ * requisição poderia falhar sozinha e deixar a inscrição sem origem.
+ */
+export const salvarInscricao = (dados: EnrollmentData, atribuicao: Atribuicao = {}) =>
   pedir<{ id: string; status: string; numeroInscricao: string | null; jaPaga: boolean }>(
     '/api/inscricoes',
-    { method: 'POST', body: JSON.stringify(dados) },
+    { method: 'POST', body: JSON.stringify({ ...dados, ...atribuicao }) },
   )
 
 export const buscarInscricao = () => pedir<Inscricao>('/api/inscricoes/atual')
@@ -118,5 +124,5 @@ export const pesquisarEnderecos = (uf: string, cidade: string, logradouro: strin
   )
 
 /** Uma visita real à landing — o topo do funil que não tem inscrição para ancorar. Chamar sempre com `.catch()`: nunca deve atrapalhar a navegação de quem visita. */
-export const registrarVisita = (dados: { variante?: string; utmSource?: string; utmMedium?: string; utmCampaign?: string }) =>
+export const registrarVisita = (dados: Atribuicao) =>
   pedir<{ ok: boolean }>('/api/visitas', { method: 'POST', body: JSON.stringify(dados) })

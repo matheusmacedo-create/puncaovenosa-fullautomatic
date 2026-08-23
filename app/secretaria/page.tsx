@@ -89,6 +89,18 @@ type Inscricao = {
   criado_em: string
 }
 
+/** Uma linha de `funil_por_origem` — uma variante ou uma campanha. */
+type LinhaDeOrigem = {
+  chave: string
+  visitas: number
+  inscricoes: number
+  pagas: number
+  completas: number
+}
+
+/** Percentual só quando o denominador existe: 0 de 0 não é 0%, é nada a dizer. */
+const pct = (parte: number, todo: number) => (todo > 0 ? `${Math.round((parte / todo) * 100)}%` : '—')
+
 const dataHora = (iso: string) =>
   new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Sao_Paulo' })
     .format(new Date(iso))
@@ -202,6 +214,19 @@ export default async function SecretariaPage({
   const falhasDePagamento = [...ultimaCobranca.values()].filter(p => STATUS_DE_FALHA.includes(p.status)).length
   const taxaDeMatricula = total ? Math.round((completas / total) * 100) : 0
 
+  // Funil por origem: agregado no banco (migration 0013), e não em memória
+  // como o resto desta página, porque `visitas_landing` cresce a cada acesso
+  // à landing — carregar tudo aqui para contar seria a primeira coisa a
+  // derrubar o painel quando a campanha escalar.
+  const [{ data: porVariante, error: erroOrigem }, { data: porCampanha }] = await Promise.all([
+    supabase.rpc('funil_por_origem', { p_dimensao: 'variante' }),
+    supabase.rpc('funil_por_origem', { p_dimensao: 'utm_campaign' }),
+  ])
+  // Cast à mão: os tipos gerados do Supabase não conhecem esta função, e
+  // `.returns<T[]>()` esbarra na inferência do próprio cliente.
+  const linhasPorVariante = (porVariante ?? []) as LinhaDeOrigem[]
+  const linhasPorCampanha = (porCampanha ?? []) as LinhaDeOrigem[]
+
   // Pontos do mapa: só quem tem coordenada gravada na resposta do passo 1 —
   // exata (BrasilAPI) ou aproximada por bairro/cidade (Nominatim, gravada em
   // PUT /api/triagem quando a exata não veio).
@@ -308,6 +333,21 @@ export default async function SecretariaPage({
             </div>
           )}
         </div>
+      </section>
+    )}
+
+    {!erroOrigem && (
+      <section className="secretaria-bloco">
+        <h2>O que converte — por variante e por campanha</h2>
+        <p className="secretaria-bloco-legenda">
+          O mesmo funil de cima, quebrado por origem. É o que responde qual página vende e qual anúncio traz
+          gente que paga — e não só gente que clica. A atribuição é de <strong>primeiro toque</strong>: quem
+          voltou por um segundo anúncio e concluiu ali continua creditado a quem o trouxe da primeira vez.
+          Quem entrou antes de 23/08/2026 aparece em <em>sem registro</em>: a inscrição só passou a guardar
+          origem a partir dessa data.
+        </p>
+        <FunilPorOrigem titulo="Variante da landing" rotuloDaChave="Variante" linhas={linhasPorVariante} />
+        <FunilPorOrigem titulo="Campanha (utm_campaign)" rotuloDaChave="Campanha" linhas={linhasPorCampanha} />
       </section>
     )}
 
@@ -633,6 +673,57 @@ export default async function SecretariaPage({
       não compartilhe a tela nem a senha fora da secretaria.
     </p>
   </Moldura>
+}
+
+/**
+ * Uma quebra do funil por uma dimensão de origem.
+ *
+ * As duas taxas medem coisas diferentes e as duas importam: "entrou" isola a
+ * página (de quem viu, quantos começaram a se inscrever) e "pagou" é o número
+ * de dinheiro, ponta a ponta. Uma variante pode ganhar na primeira e perder na
+ * segunda — atrair mais gente e vender menos — e só mostrando as duas dá para
+ * enxergar isso.
+ */
+function FunilPorOrigem({ titulo, rotuloDaChave, linhas }: {
+  titulo: string
+  rotuloDaChave: string
+  linhas: LinhaDeOrigem[]
+}) {
+  return <div className="secretaria-origem">
+    <h3>{titulo}</h3>
+    {linhas.length === 0 ? (
+      <p className="secretaria-vazio">Nada registrado ainda.</p>
+    ) : (
+      <div className="secretaria-tabela-rolagem">
+        <table className="secretaria-tabela">
+          <thead>
+            <tr>
+              <th>{rotuloDaChave}</th>
+              <th>Visitas</th>
+              <th>Entrou no funil</th>
+              <th>Pagou</th>
+              <th>Matriculou</th>
+              <th>% entrou</th>
+              <th>% pagou</th>
+            </tr>
+          </thead>
+          <tbody>
+            {linhas.map(l => (
+              <tr key={l.chave}>
+                <td><strong>{l.chave}</strong></td>
+                <td>{l.visitas}</td>
+                <td>{l.inscricoes}</td>
+                <td>{l.pagas}</td>
+                <td>{l.completas}</td>
+                <td className="secretaria-sub">{pct(l.inscricoes, l.visitas)}</td>
+                <td><strong>{pct(l.pagas, l.visitas)}</strong></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )}
+  </div>
 }
 
 function Moldura({ children, autenticado }: { children: React.ReactNode; autenticado?: boolean }) {
