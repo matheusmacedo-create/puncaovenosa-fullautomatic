@@ -7,6 +7,7 @@ import { CodigoQr } from '@/components/qr-code'
 import { EnrollmentData, loadJson, maskCpf, STORAGE_KEYS } from '@/lib/enrollment'
 import { buscarInscricao, Inscricao } from '@/lib/api-cliente'
 import { ServiceWorkerRegistration } from '@/components/service-worker-registration'
+import { rastrear } from '@/lib/rastreio'
 
 const FALLBACK: EnrollmentData = { name: 'Aluno(a) CVB-RJ', phone: '', cpf: '000.000.000-00', email: '', highSchool: true }
 
@@ -26,7 +27,15 @@ export function StudentPass() {
   useEffect(() => {
     setRascunho(loadJson(STORAGE_KEYS.enrollment, FALLBACK))
     buscarInscricao()
-      .then(setInscricao)
+      .then(dados => {
+        setInscricao(dados)
+        // Etapa 8: a ficha foi aberta com a vaga já garantida — o fim do
+        // funil. Não conta quem chega aqui sem ter pago: a ficha existe
+        // para quem já tem o que mostrar.
+        if (dados.status === 'paga' || dados.status === 'triagem_concluida') {
+          rastrear('ficha', { id: dados.id, umaVezSo: true })
+        }
+      })
       .catch(() => undefined)
       .finally(() => setCarregando(false))
   }, [])

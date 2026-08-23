@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react'
 import { resolveClientVariant, type Variant } from '@/lib/ab-test'
+import { trackLandingView } from '@/lib/checkout'
 
 /**
  * Garante que todo visitante tenha uma variante persistida.
@@ -15,12 +16,15 @@ import { resolveClientVariant, type Variant } from '@/lib/ab-test'
 export function VariantAssignment({ requested }: { requested: Variant | null }) {
   useEffect(() => {
     const resolved = resolveClientVariant()
-    if (requested) return
-    if (resolved !== 'a') {
+    if (!requested && resolved !== 'a') {
       const url = new URL(window.location.href)
       url.searchParams.set('variant', resolved)
       window.location.replace(url.toString())
+      // A página vai recarregar: a visita é contada do outro lado, com a
+      // variante certa. Contar aqui somaria uma visita que ninguém viu.
+      return
     }
+    trackLandingView(requested ?? resolved)
   }, [requested])
 
   return null

@@ -1,4 +1,5 @@
 import { COMPOSICAO_PRECO, PRECO_CENTAVOS, ROTA_INSCRICAO } from '@/lib/enrollment'
+import { PIXEL_ID } from '@/lib/pixel-id'
 
 export type InstitutionalIndicator = {
   label: string
@@ -54,7 +55,7 @@ export const courseData = {
    * Enquanto for null, nenhuma contagem de vagas aparece na página.
    */
   maxSeatsPerClass: null as number | null,
-  metaPixelId: null as string | null,
+  metaPixelId: PIXEL_ID,
   privacyPolicyUrl: null as string | null,
   institutionalIndicators: [] as InstitutionalIndicator[],
 }

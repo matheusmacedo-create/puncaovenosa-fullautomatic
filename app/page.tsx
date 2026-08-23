@@ -15,7 +15,6 @@ import { FinalCTA } from '@/components/final-cta'
 import { MobileStickyCTA } from '@/components/mobile-sticky-cta'
 import { InstitutionalFooter } from '@/components/institutional-footer'
 import { DevelopmentChecklist } from '@/components/development-checklist'
-import { MetaPixel } from '@/components/meta-pixel'
 import { StructuredData } from '@/components/structured-data'
 import { TestPriceNotice } from '@/components/test-price-notice'
 import { VariantAssignment } from '@/components/variant-assignment'
@@ -35,7 +34,6 @@ export default async function Page({
 
   return (
     <>
-      <MetaPixel />
       <StructuredData />
       <VariantAssignment requested={requested} />
       <TestPriceNotice />

@@ -1,10 +1,20 @@
 import Script from 'next/script'
-import { courseData } from '@/lib/course-data'
+import { PIXEL_ID } from '@/lib/pixel-id'
 
-/** Só é renderizado quando existe um Pixel ID válido. Nenhum ID fictício é instalado. */
+/**
+ * Pixel do Meta, em todas as páginas.
+ *
+ * Só é renderizado quando existe um ID configurado — nenhum pixel fictício é
+ * instalado.
+ *
+ * O `PageView` automático é pulado quando a página está dentro da gaveta da
+ * landing. Ali há dois documentos vivos ao mesmo tempo, a landing e o funil,
+ * e os dois carregariam o pixel: cada visitante contaria duas visitas, e todo
+ * o custo por resultado sairia pela metade. Os eventos do funil continuam
+ * saindo normalmente de dentro do iframe — o que não se repete é a visita.
+ */
 export function MetaPixel() {
-  const pixelId = courseData.metaPixelId
-  if (!pixelId) return null
+  if (!PIXEL_ID) return null
 
   return (
     <Script id="meta-pixel" strategy="afterInteractive">
@@ -16,8 +26,8 @@ n.queue=[];t=b.createElement(e);t.async=!0;
 t.src=v;s=b.getElementsByTagName(e)[0];
 s.parentNode.insertBefore(t,s)}(window,document,'script',
 'https://connect.facebook.net/en_US/fbevents.js');
-fbq('init', '${pixelId}');
-fbq('track', 'PageView');`}
+fbq('init', '${PIXEL_ID}');
+if (window.self === window.top) fbq('track', 'PageView');`}
     </Script>
   )
 }
