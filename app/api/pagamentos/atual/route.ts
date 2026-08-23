@@ -7,6 +7,7 @@ import { espelharNaPlanilha } from '@/lib/planilha'
 import { consultarTransacao } from '@/lib/unicopag'
 import { supabaseServer } from '@/lib/supabase/server'
 import { MINUTOS_PARA_EXPIRAR, PRECO_CENTAVOS } from '@/lib/enrollment'
+import { contextoDoNavegador, enviarConversaoMeta } from '@/lib/meta-capi'
 import { notificarSecretaria } from '@/lib/webhook-secretaria'
 
 /**
@@ -23,7 +24,7 @@ export const maxDuration = 60
  * intervalos para descobrir que o pagamento caiu, sem o aluno precisar
  * recarregar a página.
  */
-export function GET() {
+export function GET(request: Request) {
   return rota(async () => {
     const inscricaoId = await lerInscricaoId()
     if (!inscricaoId) return erro('Nenhuma inscrição nesta sessão.', 401)
@@ -78,6 +79,9 @@ export function GET() {
         if (status !== data.status) {
           espelharNaPlanilha(inscricaoId)
           notificarSecretaria(inscricaoId, status === 'confirmado' ? 'pagamento_confirmado' : 'pagamento_falhou')
+          if (status === 'confirmado') {
+            enviarConversaoMeta(inscricaoId, 'pago', { pagamentoId: data.id, contexto: contextoDoNavegador(request) })
+          }
         }
       } catch (e) {
         // Provedor fora do ar não pode derrubar a tela: seguimos com o que o

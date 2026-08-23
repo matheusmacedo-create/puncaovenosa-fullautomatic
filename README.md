@@ -220,6 +220,18 @@ Repetição é tratada em duas camadas: `umaVezSo` grava em `sessionStorage` par
 
 Verificado com Playwright interceptando `/api/*` e substituindo `window.fbq` por uma função que só grava o que recebeu: as 8 etapas disparam na ordem certa, sem faltar e sem duplicar; os eventos de dinheiro carregam o valor real da cobrança simulada, não o preço do build; reentrar na tela de pagamento com a cobrança já confirmada não duplica o `Purchase`; e sem a variável de ambiente, nenhum vestígio do pixel aparece no HTML.
 
+### Conversions API (cópia server-side)
+
+O pixel do navegador tem um limite físico: bloqueador de anúncio, Safari/ITP e navegador com rastreamento restrito derrubam uma fatia real dos eventos sem ninguém perceber que sumiram — o Meta nunca avisa "faltaram eventos", só reporta um número mais baixo do que o real. `lib/meta-capi.ts` manda uma segunda cópia, pelo servidor, dos quatro eventos que têm evento padrão do Meta e nascem de uma transição que o back-end já enxerga: `Lead` (dados recebidos), `AddPaymentInfo` (pagamento iniciado), `Purchase` (pagamento confirmado) e `CompleteRegistration` (triagem concluída). `funil_2_cta` e os dois marcos sem evento padrão (`triagemInicio`, `ficha`) continuam só no pixel — são clique e navegação, não têm uma escrita no banco para ancorar o envio do servidor.
+
+Os nomes de etapa (`funil_N_...`) moraram em `lib/rastreio.ts` até o servidor também precisar deles; foram para `lib/etapas-funil.ts`, um módulo neutro sem `'use client'`, para as duas pontas usarem exatamente o mesmo texto — é o que faz o `event_id` do pixel e o da Conversions API baterem e o Meta deduplicar os dois como um evento só, em vez de contar a venda duas vezes.
+
+**O que o servidor manda que o navegador não tem, ou nem sempre captura a tempo:** e-mail, telefone e CPF da inscrição, com hash SHA-256 (`em`, `ph`, `external_id` — a correspondência avançada do Meta), além de nome (`fn`/`ln`). O CPF em especial nunca passa pelo pixel — o navegador não tem essa informação nesse formato em lugar nenhum. Quando a requisição é do próprio navegador do aluno (dados, pagamento, confirmação manual, consulta de status, triagem), soma-se IP, user-agent e os cookies `_fbp`/`_fbc`. **Exceção proposital:** o webhook da Únicopag (`app/api/webhooks/unicopag/route.ts`) não passa esses três — a requisição ali vem do servidor da Únicopag, não do navegador do aluno, e usar o IP/user-agent deles envenenaria a correspondência em vez de melhorá-la.
+
+Configurado por `META_CAPI_TOKEN` (gerado no Gerenciador de Eventos → Configurações → API de Conversões), usando o mesmo `NEXT_PUBLIC_META_PIXEL_ID` como `DATASET_ID`. Sem a variável, é um no-op — o pixel do navegador segue funcionando sozinho, do mesmo jeito que sempre funcionou. `META_CAPI_TEST_EVENT_CODE` (opcional) faz os envios aparecerem em tempo real na aba "Testar eventos" do Gerenciador, para conferir antes de confiar.
+
+Nunca lança — Meta fora do ar ou token vencido não podem derrubar uma inscrição — e toda tentativa, sucesso ou falha, fica gravada em `meta_capi_entregas` (migration `0010`). É o que o bloco "Checkpoint do Pixel" em `/secretaria` lê, com reenvio manual para quem falhou.
+
 ## Pontos de integração pendentes
 
 O funil está ligado à **Únicopag** em produção. PIX e cartão criam cobrança de verdade.

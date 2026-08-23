@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { digits, fieldError, EnrollmentData } from '@/lib/enrollment'
 import { corpo, erro, rota } from '@/lib/http'
+import { contextoDoNavegador, enviarConversaoMeta } from '@/lib/meta-capi'
 import { espelharNaPlanilha } from '@/lib/planilha'
 import { gravarInscricaoId } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabase/server'
@@ -51,6 +52,7 @@ export function POST(request: Request) {
     await gravarInscricaoId(data.id)
     espelharNaPlanilha(data.id)
     notificarSecretaria(data.id, 'inscricao_recebida')
+    enviarConversaoMeta(data.id, 'dados', { contexto: contextoDoNavegador(request) })
     return NextResponse.json({
       id: data.id,
       status: data.status,

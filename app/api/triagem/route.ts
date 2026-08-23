@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { coordenadaAproximada } from '@/lib/cep'
 import { triageQuestions } from '@/lib/enrollment'
 import { corpo, erro, rota } from '@/lib/http'
+import { contextoDoNavegador, enviarConversaoMeta } from '@/lib/meta-capi'
 import { lerInscricaoId } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabase/server'
 import { notificarSecretaria } from '@/lib/webhook-secretaria'
@@ -14,7 +15,7 @@ const TOTAL_PASSOS = triageQuestions.length
 export function GET() {
   return rota(async () => {
     const inscricaoId = await lerInscricaoId()
-    if (!inscricaoId) return NextResponse.json({ respostas: {}, concluida: false })
+    if (!inscricaoId) return NextResponse.json({ id: null, respostas: {}, concluida: false })
 
     const { data, error } = await supabaseServer()
       .from('triagem_respostas')
@@ -28,6 +29,10 @@ export function GET() {
 
     const respostas = Object.fromEntries((data ?? []).map(r => [String(r.passo), r.resposta]))
     return NextResponse.json({
+      // O front usa isto só para marcar o CompleteRegistration com o mesmo
+      // eventID que a Conversions API manda pelo servidor — é a própria
+      // inscrição da sessão de quem pergunta, não o dado de outra pessoa.
+      id: inscricaoId,
       respostas,
       concluida: Object.keys(respostas).length >= TOTAL_PASSOS,
     })
@@ -83,7 +88,10 @@ export function PUT(request: Request) {
       p_inscricao_id: inscricaoId,
     })
 
-    if (concluida === true) notificarSecretaria(inscricaoId, 'triagem_concluida')
+    if (concluida === true) {
+      notificarSecretaria(inscricaoId, 'triagem_concluida')
+      enviarConversaoMeta(inscricaoId, 'triagemFim', { contexto: contextoDoNavegador(request) })
+    }
 
     return NextResponse.json({ salvo: true, concluida: concluida === true })
   })

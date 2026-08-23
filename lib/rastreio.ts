@@ -1,54 +1,22 @@
 'use client'
 
 import { courseData } from '@/lib/course-data'
+import { type Etapa, ETAPAS, type NomeDaEtapa } from '@/lib/etapas-funil'
 import { PIXEL_ID } from '@/lib/pixel-id'
 
-export { PIXEL_ID }
+export { PIXEL_ID, ETAPAS }
+export type { NomeDaEtapa }
 
 /**
- * Rastreamento do funil, ponta a ponta.
+ * Rastreamento do funil, ponta a ponta, do lado do navegador.
  *
- * Cada etapa tem nome próprio e um evento do Meta correspondente. Os nomes
- * ficam todos aqui, e não espalhados pelas telas, porque relatório de anúncio
- * se lê pelo nome do evento: um `Lead` disparado de dois lugares com nomes
- * diferentes vira duas linhas que ninguém consegue comparar.
+ * As etapas (nomes, evento padrão do Meta) moraram aqui até o servidor
+ * também precisar delas para a Conversions API — ver `lib/etapas-funil.ts`
+ * para onde foram, e o motivo.
  *
  * Sem `NEXT_PUBLIC_META_PIXEL_ID`, tudo aqui vira função vazia — nenhum pixel
  * fictício é instalado, e o funil funciona igual.
  */
-
-type EventoPadrao =
-  | 'ViewContent' | 'InitiateCheckout' | 'Lead'
-  | 'AddPaymentInfo' | 'Purchase' | 'CompleteRegistration'
-
-type Etapa = {
-  /** Nome da etapa, usado no dataLayer e como evento próprio no Meta. */
-  nome: string
-  /** Evento padrão do Meta, quando existe um que signifique a mesma coisa. */
-  evento: EventoPadrao | null
-  /** Só as etapas de dinheiro carregam valor. */
-  comValor?: boolean
-}
-
-/**
- * As oito partes do funil, na ordem em que o aluno passa por elas.
- *
- * A numeração no nome não é enfeite: no gerenciador do Meta os eventos
- * aparecem em ordem alfabética, e sem ela `funil_pago` viria antes de
- * `funil_dados` — o funil apareceria de cabeça para baixo.
- */
-export const ETAPAS = {
-  landing:       { nome: 'funil_1_landing',       evento: 'ViewContent' },
-  cta:           { nome: 'funil_2_cta',           evento: 'InitiateCheckout' },
-  dados:         { nome: 'funil_3_dados',         evento: 'Lead' },
-  pagamento:     { nome: 'funil_4_pagamento',     evento: 'AddPaymentInfo', comValor: true },
-  pago:          { nome: 'funil_5_pago',          evento: 'Purchase', comValor: true },
-  triagemInicio: { nome: 'funil_6_triagem_inicio', evento: null },
-  triagemFim:    { nome: 'funil_7_triagem_fim',   evento: 'CompleteRegistration' },
-  ficha:         { nome: 'funil_8_ficha',         evento: null },
-} as const satisfies Record<string, Etapa>
-
-export type NomeDaEtapa = keyof typeof ETAPAS
 
 type Fbq = (...args: unknown[]) => void
 

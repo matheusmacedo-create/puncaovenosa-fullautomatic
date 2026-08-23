@@ -8,6 +8,7 @@ import { gerarPixCopiaCola } from '@/lib/pix'
 import { lerInscricaoId } from '@/lib/session'
 import { confirmacaoManualPermitida, simulacaoAtiva } from '@/lib/simulacao'
 import { supabaseServer } from '@/lib/supabase/server'
+import { contextoDoNavegador, enviarConversaoMeta } from '@/lib/meta-capi'
 import { urlDoWebhook } from '@/lib/site-url'
 import { criarPagamento, NovoPagamento, UnicopagErro } from '@/lib/unicopag'
 import { notificarSecretaria } from '@/lib/webhook-secretaria'
@@ -166,6 +167,7 @@ export function POST(request: Request) {
     }
 
     notificarSecretaria(inscricaoId, 'pagamento_iniciado')
+    enviarConversaoMeta(inscricaoId, 'pagamento', { pagamentoId: data.id, contexto: contextoDoNavegador(request) })
 
     return NextResponse.json({
       id: data.id,
