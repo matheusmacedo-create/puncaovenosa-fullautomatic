@@ -101,7 +101,7 @@ export const encerrarCobranca = (pagamentoId: string, desfecho: 'expirado' | 're
   )
 
 export const buscarTriagem = () =>
-  pedir<{ respostas: Record<string, unknown>; concluida: boolean }>('/api/triagem')
+  pedir<{ id: string | null; respostas: Record<string, unknown>; concluida: boolean }>('/api/triagem')
 
 export const salvarResposta = (passo: number, resposta: unknown) =>
   pedir<{ salvo: boolean; concluida: boolean }>('/api/triagem', {

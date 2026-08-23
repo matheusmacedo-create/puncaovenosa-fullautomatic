@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { rota } from '@/lib/http'
 import { formatarBRL, PRECO_CENTAVOS, PRECO_DE_TESTE } from '@/lib/enrollment'
+import { metaCapiConfigurado } from '@/lib/meta-capi'
 import { planilhaConfigurada } from '@/lib/planilha'
 import { PIXEL_ID } from '@/lib/pixel-id'
 import { estadoDaSecretaria } from '@/lib/secretaria'
@@ -124,6 +125,8 @@ export function GET(request: Request) {
       secretaria: estadoDaSecretaria(),
       // Também opcional: sem ID, nenhum pixel fictício é instalado.
       metaPixel: { configurado: PIXEL_ID !== null },
+      // Também opcional: sem token, o servidor não manda cópia ao Meta — o pixel do navegador segue sozinho.
+      metaCapi: { configurada: metaCapiConfigurado() },
       preco: {
         centavos: PRECO_CENTAVOS,
         exibido: formatarBRL(PRECO_CENTAVOS),

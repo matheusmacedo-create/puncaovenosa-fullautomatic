@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { corpo, erro, rota } from '@/lib/http'
 import { traduzirStatus } from '@/lib/pagamento-status'
+import { enviarConversaoMeta } from '@/lib/meta-capi'
 import { espelharNaPlanilha } from '@/lib/planilha'
 import { supabaseServer } from '@/lib/supabase/server'
 import { consultarTransacao } from '@/lib/unicopag'
@@ -73,6 +74,10 @@ export function POST(request: Request) {
       if (!data.ja_confirmado) {
         espelharNaPlanilha(pagamento.inscricao_id)
         notificarSecretaria(pagamento.inscricao_id, 'pagamento_confirmado')
+        // Sem `contexto`: esta requisição vem do servidor da Únicopag, não do
+        // navegador do aluno — passar o IP/user-agent daqui envenenaria a
+        // correspondência avançada no Meta em vez de melhorá-la.
+        enviarConversaoMeta(pagamento.inscricao_id, 'pago', { pagamentoId: pagamento.id })
       }
       return NextResponse.json({ ok: true, status, jaConfirmado: data.ja_confirmado })
     }

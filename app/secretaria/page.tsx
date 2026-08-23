@@ -3,6 +3,7 @@ import { RedCross } from '@/components/clinical-header'
 import { SecretariaMapa, type PontoMapa } from '@/components/secretaria-mapa'
 import { coordsDaResposta, resumoDaResposta } from '@/lib/cep'
 import { formatarBRL, maskCpf, maskPhone, triageQuestions } from '@/lib/enrollment'
+import { metaCapiConfigurado } from '@/lib/meta-capi'
 import { secretariaAutenticada, secretariaHabilitada } from '@/lib/secretaria'
 import { supabaseServer } from '@/lib/supabase/server'
 import { EVENTOS_WEBHOOK, webhookSecretariaConfigurado } from '@/lib/webhook-secretaria'
@@ -35,6 +36,13 @@ const NOME_DO_EVENTO: Record<string, string> = {
   pagamento_confirmado: 'Pagamento confirmado',
   pagamento_falhou: 'Pagamento falhou',
   triagem_concluida: 'Triagem concluída',
+}
+
+const NOME_DO_EVENTO_META: Record<string, string> = {
+  funil_3_dados: 'Lead (dados recebidos)',
+  funil_4_pagamento: 'AddPaymentInfo (pagamento iniciado)',
+  funil_5_pago: 'Purchase (pagamento confirmado)',
+  funil_7_triagem_fim: 'CompleteRegistration (triagem concluída)',
 }
 
 const STATUS_DE_FALHA = ['recusado', 'expirado', 'estornado']
@@ -101,7 +109,11 @@ function respostaLegivel(passo: number, valor: unknown): string {
 export default async function SecretariaPage({
   searchParams,
 }: {
-  searchParams: Promise<{ erro?: string; reenviado?: string; erroWebhook?: string }>
+  searchParams: Promise<{
+    erro?: string
+    reenviado?: string; erroWebhook?: string
+    reenviadoMeta?: string; erroMeta?: string
+  }>
 }) {
   // Deploy que não pediu por este painel não tem este painel.
   if (!secretariaHabilitada()) notFound()
@@ -205,6 +217,16 @@ export default async function SecretariaPage({
 
   const nomePorInscricao = new Map((inscricoes ?? []).map(i => [i.id, i.nome]))
   const falhasRecentes = (entregas ?? []).filter(e => !e.sucesso).length
+
+  // Checkpoint do Pixel: mesma lógica, para a Conversions API do Meta.
+  const metaConfigurado = metaCapiConfigurado()
+  const { data: entregasMeta, error: erroEntregasMeta } = await supabase
+    .from('meta_capi_entregas')
+    .select('id, inscricao_id, evento, pagamento_id, sucesso, status_http, erro, criado_em')
+    .order('criado_em', { ascending: false })
+    .limit(50)
+
+  const falhasRecentesMeta = (entregasMeta ?? []).filter(e => !e.sucesso).length
 
   return <Moldura autenticado>
     <div className="secretaria-resumo">
@@ -404,6 +426,97 @@ export default async function SecretariaPage({
         <p>
           Responda 2xx para marcar como entregue. Qualquer outra coisa fica registrada como falha nesta tela,
           com o motivo, e pode ser reenviada por aqui — sem retentativa automática.
+        </p>
+      </details>
+    </section>
+
+    <section className="secretaria-bloco">
+      <h2>Checkpoint do Pixel (Conversions API)</h2>
+      <p className="secretaria-bloco-legenda">
+        Além do pixel no navegador, o servidor manda uma cópia de cada evento de dinheiro (Lead, AddPaymentInfo,
+        Purchase, CompleteRegistration) direto para o Meta — bloqueador de anúncio e Safari costumam derrubar uma
+        fatia real do que depende só do navegador, sem ninguém perceber. Esta lista é onde essa cópia falhando
+        fica visível.
+      </p>
+
+      {params.reenviadoMeta && <p className="secretaria-selo ok" role="status">Reenviado ao Meta.</p>}
+      {params.erroMeta && <p className="secretaria-erro" role="alert">Não foi possível reenviar. Confira o log abaixo.</p>}
+
+      <div className={`secretaria-webhook-status ${metaConfigurado ? 'ok' : 'espera'}`}>
+        {metaConfigurado
+          ? 'Configurado — META_CAPI_TOKEN definida.'
+          : 'Não configurado. Sem META_CAPI_TOKEN no ambiente, nenhum evento é enviado ao Meta pelo servidor — o pixel do navegador continua funcionando normalmente sozinho.'}
+      </div>
+
+      {erroEntregasMeta ? (
+        <p className="secretaria-vazio">
+          O log ainda não está disponível — provavelmente a migration <code>0010_meta_capi_entregas</code> não foi
+          aplicada neste banco ainda.
+        </p>
+      ) : !entregasMeta || entregasMeta.length === 0 ? (
+        <p className="secretaria-vazio">Nenhum evento enviado ainda.</p>
+      ) : (
+        <>
+          {falhasRecentesMeta > 0 && (
+            <p className="secretaria-erro" role="alert">{falhasRecentesMeta} entrega(s) com falha nas últimas {entregasMeta.length}.</p>
+          )}
+          <div className="secretaria-tabela-rolagem">
+            <table className="secretaria-tabela">
+              <thead>
+                <tr>
+                  <th>Quando</th>
+                  <th>Evento</th>
+                  <th>Aluno</th>
+                  <th>Resultado</th>
+                  <th>Detalhe</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {entregasMeta.map(e => (
+                  <tr key={e.id}>
+                    <td className="secretaria-quando">{dataHora(e.criado_em)}</td>
+                    <td>{NOME_DO_EVENTO_META[e.evento] ?? e.evento}</td>
+                    <td>{nomePorInscricao.get(e.inscricao_id) ?? '—'}</td>
+                    <td><span className={`secretaria-selo ${e.sucesso ? 'ok' : 'espera'}`}>{e.sucesso ? 'entregue' : 'falhou'}</span></td>
+                    <td className="secretaria-sub">{e.status_http ?? '—'}{e.erro ? ` · ${e.erro}` : ''}</td>
+                    <td>
+                      {!e.sucesso && metaConfigurado && (
+                        <form method="post" action="/secretaria/meta/reenviar">
+                          <input type="hidden" name="inscricaoId" value={e.inscricao_id} />
+                          <input type="hidden" name="evento" value={e.evento} />
+                          {e.pagamento_id && <input type="hidden" name="pagamentoId" value={e.pagamento_id} />}
+                          <button className="text-button" type="submit">Reenviar</button>
+                        </form>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      <details className="secretaria-contrato">
+        <summary>Como conferir e o que isto envia</summary>
+        <p>
+          Configure <code>META_CAPI_TOKEN</code> (gerado no Gerenciador de Eventos → Configurações → API de
+          Conversões → Gerar token de acesso) nas variáveis de ambiente. O <code>DATASET_ID</code> que a API pede é
+          o mesmo <code>NEXT_PUBLIC_META_PIXEL_ID</code> já usado pelo pixel.
+        </p>
+        <p>
+          Para ver os eventos aparecendo em tempo real no Meta antes de confiar neles, defina também{' '}
+          <code>META_CAPI_TEST_EVENT_CODE</code> (aba "Testar eventos" do Gerenciador de Eventos) — com ela
+          definida, os eventos aparecem lá na hora, sem entrar nas métricas de campanha. Remova para valer de
+          verdade.
+        </p>
+        <p>
+          Cada evento leva <code>external_id</code> (CPF), <code>ph</code> (telefone), <code>em</code> (e-mail) e{' '}
+          <code>fn</code>/<code>ln</code> (nome) com hash SHA-256 — a correspondência avançada do Meta, com dado
+          que o navegador nem sempre captura a tempo (ou nunca captura, como o CPF). O <code>event_id</code> é o
+          mesmo que o pixel do navegador manda para o mesmo evento, então o Meta deduplica os dois como um só em
+          vez de contar a venda duas vezes.
         </p>
       </details>
     </section>

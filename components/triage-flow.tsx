@@ -14,6 +14,9 @@ export function TriageFlow({ step }: { step: number }) {
   const key = String(step)
   const [answers, setAnswers] = useState<TriageAnswers>({})
   const [error, setError] = useState('')
+  // Só para marcar o CompleteRegistration com o mesmo eventID que o servidor
+  // usa na Conversions API — nada mais no front lê este valor.
+  const inscricaoIdRef = useRef<string | null>(null)
 
   // O servidor é a fonte da verdade; o localStorage fica como cache para o
   // caso de o aluno abrir a triagem offline ou antes de a resposta subir.
@@ -21,7 +24,8 @@ export function TriageFlow({ step }: { step: number }) {
     const cache = loadJson<TriageAnswers>(STORAGE_KEYS.triage, {})
     setAnswers(cache)
     buscarTriagem()
-      .then(({ respostas }) => {
+      .then(({ id, respostas }) => {
+        inscricaoIdRef.current = id
         if (Object.keys(respostas).length) setAnswers(respostas as TriageAnswers)
       })
       .catch(() => undefined)
@@ -43,7 +47,7 @@ export function TriageFlow({ step }: { step: number }) {
   const next = () => {
     // Etapa 7: as 8 perguntas foram respondidas. É o CompleteRegistration —
     // a inscrição está pronta, com dados suficientes para montar a turma.
-    if (step === 8) rastrear('triagemFim', { umaVezSo: true })
+    if (step === 8) rastrear('triagemFim', { id: inscricaoIdRef.current ?? undefined, umaVezSo: true })
     step === 8 ? router.push('/minha-inscricao') : router.push(`/triagem/${step + 1}`)
   }
   const back = () => step === 1 ? router.push(`${ROTA_INSCRICAO}?etapa=confirmado`) : router.push(`/triagem/${step - 1}`)
