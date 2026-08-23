@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { courseData } from '@/lib/course-data'
 import {
   COMPOSICAO_PRECO, digits, MAX_PARCELAS, MINUTOS_PARA_EXPIRAR, PIX_RECEBEDOR, PRECO_CENTAVOS,
 } from '@/lib/enrollment'
@@ -102,16 +103,25 @@ export function POST(request: Request) {
           phone_number: digits(inscricao.telefone),
           document: digits(inscricao.cpf),
         },
+        // O nome do curso vai na frente de cada item, e não só em `rotulo`
+        // ("Matrícula", "Curso presencial"): é o que aparece na Únicopag e no
+        // comprovante do PIX, e sozinho "Matrícula" não diz de qual curso.
+        // Na nossa própria tela o nome já aparece no título da página, então
+        // `rotulo` continua enxuto lá — só o que vai para o provedor leva o
+        // prefixo.
         cart: COMPOSICAO_PRECO.map(item => ({
           hash: item.id,
-          title: item.rotulo,
+          title: `${courseData.courseName} — ${item.rotulo}`,
           price: item.centavos,
           quantity: 1,
         })),
         postback_url: urlDoWebhook(),
         expire_in_days: DIAS_PARA_EXPIRAR,
         origin: 'funil-puncao-venosa',
-        metadata: { inscricao_id: inscricaoId, referencia: txid },
+        // Reforça no dashboard da Únicopag quem comprou e o quê, além do que
+        // já vai em `customer` e em `cart` — `metadata` é onde o painel deles
+        // costuma mostrar informação extra sobre a transação.
+        metadata: { inscricao_id: inscricaoId, referencia: txid, curso: courseData.courseName, aluno: inscricao.nome },
         ...(metodo === 'cartao' && cartao
           ? {
               card: {
