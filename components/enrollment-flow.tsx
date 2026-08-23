@@ -7,6 +7,7 @@ import { ClinicalHeader, RedCross } from '@/components/clinical-header'
 import { CodigoQr } from '@/components/qr-code'
 import { CardForm } from '@/components/card-form'
 import { PriceBreakdown } from '@/components/price-breakdown'
+import { courseData } from '@/lib/course-data'
 import {
   CARTAO_VAZIO, DadosCartao, digits, EnrollmentData, fieldError, formatarBRL,
   loadJson, maskCpf, maskPhone, MENSAGEM_FECHAR_CHECKOUT, PagamentoMetodo, PRECO_CENTAVOS,
@@ -323,6 +324,7 @@ function DataStage({ data, errors, cadastro, enviando, erroGeral, update, blur, 
         </div>
       </div>
       <PriceBreakdown />
+      <LegalNote />
       {erroGeral && <p className="error" role="alert">{erroGeral}</p>}
     </div>
     <footer className="sheet-footer">
@@ -340,6 +342,17 @@ function Field({ id, label, error, children }: { id: string; label: string; erro
   return <div className="field"><label htmlFor={id}>{label}</label>{children}{error && <p className="error" role="alert">{error}</p>}</div>
 }
 
+/** Aviso de privacidade e reembolso exibido antes de qualquer cobrança. */
+function LegalNote() {
+  return <p className="legal-note">
+    Ao continuar, você concorda com nossa{' '}
+    {courseData.privacyPolicyUrl && <a href={courseData.privacyPolicyUrl} target="_blank" rel="noopener noreferrer">Política de Privacidade</a>}
+    {courseData.privacyPolicyUrl && courseData.refundPolicyUrl && ' e a '}
+    {courseData.refundPolicyUrl && <a href={courseData.refundPolicyUrl} target="_blank" rel="noopener noreferrer">Política de Cancelamento e Reembolso</a>}
+    .
+  </p>
+}
+
 function PaymentStage({ metodo, cobranca, copied, restante, enviando, erroGeral, cartao, setCartao, trocarMetodo, copyPix, gerarNovoCodigo, pagarComCartao, simular }: {
   metodo: PagamentoMetodo; cobranca: Cobranca | null; copied: boolean; restante: number | null
   enviando: boolean; erroGeral: string
@@ -355,6 +368,7 @@ function PaymentStage({ metodo, cobranca, copied, restante, enviando, erroGeral,
     <p className="payment-value">{formatarBRL(PRECO_CENTAVOS)}</p>
     <p className="receiver">Recebedor: Cruz Vermelha Brasileira — Filial RJ</p>
     <PriceBreakdown itens={cobranca?.itens ?? undefined} total={cobranca?.valorCentavos} />
+    <LegalNote />
 
     <div className="method-tabs" role="tablist" aria-label="Meio de pagamento">
       <button role="tab" aria-selected={metodo === 'pix'} className={`method-tab ${metodo === 'pix' ? 'selected' : ''}`} onClick={() => trocarMetodo('pix')}><QrCode /> PIX</button>
