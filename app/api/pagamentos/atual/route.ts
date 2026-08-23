@@ -8,6 +8,7 @@ import { consultarTransacao } from '@/lib/unicopag'
 import { supabaseServer } from '@/lib/supabase/server'
 import { MINUTOS_PARA_EXPIRAR, PRECO_CENTAVOS } from '@/lib/enrollment'
 import { contextoDoNavegador, enviarConversaoMeta } from '@/lib/meta-capi'
+import { removerDoPublicoDeAbandono } from '@/lib/meta-audiencia'
 import { notificarSecretaria } from '@/lib/webhook-secretaria'
 
 /**
@@ -81,6 +82,7 @@ export function GET(request: Request) {
           notificarSecretaria(inscricaoId, status === 'confirmado' ? 'pagamento_confirmado' : 'pagamento_falhou')
           if (status === 'confirmado') {
             enviarConversaoMeta(inscricaoId, 'pago', { pagamentoId: data.id, contexto: contextoDoNavegador(request) })
+            removerDoPublicoDeAbandono(inscricaoId)
           }
         }
       } catch (e) {
