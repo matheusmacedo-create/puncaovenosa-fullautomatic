@@ -55,6 +55,7 @@ function corPorIdade(dias: number) {
 export function SecretariaMapa({ pontos }: { pontos: PontoMapa[] }) {
   const divRef = useRef<HTMLDivElement>(null)
   const mapaRef = useRef<LeafletMap | null>(null)
+  const observadorRef = useRef<ResizeObserver | null>(null)
 
   useEffect(() => {
     if (!divRef.current) return
@@ -84,14 +85,35 @@ export function SecretariaMapa({ pontos }: { pontos: PontoMapa[] }) {
         }).addTo(mapa).bindPopup(ponto.popup)
       })
 
-      if (marcadores.length) {
-        const limites = L.featureGroup(marcadores).getBounds()
-        mapa.fitBounds(limites.pad(0.3), { maxZoom: 13 })
+      const limites = marcadores.length ? L.featureGroup(marcadores).getBounds() : null
+
+      /**
+       * O Leaflet mede o container uma vez, ao montar, e guarda esse tamanho.
+       * Dentro de uma aba escondida esse tamanho é zero: sem reavaliar, o mapa
+       * aparece cinza ou cortado quando a aba é aberta, e o enquadramento sai
+       * calculado sobre uma área de 0×0. O observador cobre a troca de aba, o
+       * redimensionamento da janela e qualquer mudança de layout.
+       */
+      let enquadrado = false
+      const ajustar = () => {
+        if (!divRef.current?.clientWidth) return
+        mapa.invalidateSize()
+        if (!enquadrado && limites) {
+          mapa.fitBounds(limites.pad(0.3), { maxZoom: 13 })
+          enquadrado = true
+        }
       }
+
+      const observador = new ResizeObserver(ajustar)
+      observador.observe(divRef.current)
+      observadorRef.current = observador
+      ajustar()
     })
 
     return () => {
       cancelado = true
+      observadorRef.current?.disconnect()
+      observadorRef.current = null
       mapaRef.current?.remove()
       mapaRef.current = null
     }

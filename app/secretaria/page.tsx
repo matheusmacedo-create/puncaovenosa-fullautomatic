@@ -1,5 +1,7 @@
 import { notFound } from 'next/navigation'
 import { RedCross } from '@/components/clinical-header'
+import { SecretariaAbas } from '@/components/secretaria-abas'
+import { SecretariaInscricoes, type LinhaInscricao } from '@/components/secretaria-inscricoes'
 import { SecretariaMapa, type PontoMapa } from '@/components/secretaria-mapa'
 import { coordsDaResposta, resumoDaResposta } from '@/lib/cep'
 import { formatarBRL, maskCpf, maskPhone, triageQuestions } from '@/lib/enrollment'
@@ -106,6 +108,9 @@ const pct = (parte: number, todo: number) => (todo > 0 ? `${Math.round((parte / 
 const ROTULOS_DAS_PAGINAS = Object.fromEntries(
   CHAVES.map(chave => [chave, { nome: PAGINAS[chave].nome, caminho: caminhoDaPagina(chave) }]),
 )
+
+/** Minúsculas e sem acento, para a busca da tabela achar "Joao" digitando "joão". */
+const normalizar = (v: string) => v.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
 
 const dataHora = (iso: string) =>
   new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Sao_Paulo' })
@@ -272,6 +277,54 @@ export default async function SecretariaPage({
 
   const falhasRecentesMeta = (entregasMeta ?? []).filter(e => !e.sucesso).length
 
+  // Formatação toda aqui, no servidor: a tabela do cliente só desenha o que
+  // recebe, sem precisar de máscara, moeda ou fuso do lado do navegador.
+  // `busca` já vem normalizada para o filtro não repetir esse trabalho a
+  // cada tecla digitada.
+  const linhasInscricoes: LinhaInscricao[] = (inscricoes ?? []).map(i => {
+    const cobranca = ultimaCobranca.get(i.id)
+    const respostasDaPessoa = triagem.get(i.id)
+    const paga = i.status === 'paga' || i.status === 'triagem_concluida'
+    return {
+      id: i.id,
+      quando: dataHora(i.criado_em),
+      nome: i.nome,
+      identificacao: `${i.numero_inscricao ?? 'sem número'} · ${maskCpf(i.cpf)}`,
+      telefone: maskPhone(i.telefone),
+      email: i.email ?? '—',
+      situacao: SITUACAO[i.status] ?? i.status,
+      paga,
+      status: i.status,
+      pagamento: cobranca?.status ?? null,
+      pagamentoDetalhe: cobranca ? `${cobranca.metodo} · ${formatarBRL(cobranca.valor_centavos)}` : null,
+      respostas: PASSOS_UTEIS.map(p =>
+        respostasDaPessoa?.has(p.passo) ? respostaLegivel(p.passo, respostasDaPessoa.get(p.passo)) : '—',
+      ),
+      busca: normalizar([i.nome, i.cpf, i.email ?? '', i.telefone, i.numero_inscricao ?? ''].join(' ')),
+    }
+  })
+
+  const COLUNAS_DE_TRIAGEM = PASSOS_UTEIS.map(p => ({
+    passo: p.passo,
+    rotulo: p.rotulo,
+    pergunta: triageQuestions[p.passo - 1]?.title ?? '',
+  }))
+
+  /**
+   * O que pede ação agora — e só isso.
+   *
+   * Uma lista de zeros ("0 falhas, 0 pendências") ocupa o mesmo espaço de uma
+   * lista de problemas e ensina a ignorar o bloco. Item que está resolvido
+   * não aparece; sem nada pendente, o bloco vira uma linha dizendo isso.
+   */
+  const atencao = [
+    aguardando > 0 && { texto: `${aguardando} abriram cobrança e não pagaram`, acao: 'Aba Inscrições, recorte "Falta pagar".' },
+    pagouSoTriagemFalta > 0 && { texto: `${pagouSoTriagemFalta} pagaram e não terminaram a triagem`, acao: 'Aba Inscrições, recorte "Pagou, falta triagem".' },
+    falhasDePagamento > 0 && { texto: `${falhasDePagamento} cobranças recusadas, expiradas ou estornadas`, acao: 'Confira na coluna Pagamento da lista.' },
+    falhasRecentes > 0 && { texto: `${falhasRecentes} entregas do webhook falharam`, acao: 'Aba Diagnóstico, bloco do webhook — dá para reenviar por lá.' },
+    falhasRecentesMeta > 0 && { texto: `${falhasRecentesMeta} envios ao Meta falharam`, acao: 'Aba Diagnóstico, bloco do Pixel — dá para reenviar por lá.' },
+  ].filter(Boolean) as { texto: string; acao: string }[]
+
   // Checkpoint do público de remarketing: mesma lógica, para quem está no
   // público personalizado do Meta agora (adicionado e ainda não removido).
   const audienciaConfig = audienciaConfigurada()
@@ -301,6 +354,34 @@ export default async function SecretariaPage({
       </p>
     )}
 
+    {atencao.length > 0 ? (
+      <section className="secretaria-atencao" aria-labelledby="titulo-atencao">
+        <h2 id="titulo-atencao">Precisa de atenção</h2>
+        <ul>
+          {atencao.map(item => (
+            <li key={item.texto}>
+              <strong>{item.texto}</strong>
+              <span>{item.acao}</span>
+            </li>
+          ))}
+        </ul>
+      </section>
+    ) : (
+      <p className="secretaria-tudo-certo">Nada pendente. Nenhuma entrega falhando e ninguém parado no meio do funil.</p>
+    )}
+
+    <SecretariaAbas abas={[
+      {
+        id: 'inscricoes',
+        rotulo: 'Inscrições',
+        conteudo: total === 0
+          ? <p className="secretaria-vazio">Nenhuma inscrição ainda. Assim que alguém preencher a primeira etapa, ela aparece aqui.</p>
+          : <SecretariaInscricoes linhas={linhasInscricoes} colunas={COLUNAS_DE_TRIAGEM} />,
+      },
+      {
+        id: 'funil',
+        rotulo: 'Funil e origem',
+        conteudo: <>
     {total > 0 && (
       <section className="secretaria-bloco">
         <h2>Funil completo — quem entrou × quem matriculou</h2>
@@ -357,7 +438,12 @@ export default async function SecretariaPage({
         <FunilPorOrigem titulo="Campanha (utm_campaign)" rotuloDaChave="Campanha" linhas={linhasPorCampanha} />
       </section>
     )}
-
+        </>,
+      },
+      {
+        id: 'mapa',
+        rotulo: 'Mapa',
+        conteudo: <>
     <section className="secretaria-bloco">
       <h2>De onde vêm as inscrições</h2>
       <p className="secretaria-bloco-legenda">
@@ -375,55 +461,12 @@ export default async function SecretariaPage({
       <SecretariaMapa pontos={pontosMapa} />
     </section>
 
-    {total === 0 ? (
-      <p className="secretaria-vazio">Nenhuma inscrição ainda. Assim que alguém preencher a primeira etapa, ela aparece aqui.</p>
-    ) : (
-      <div className="secretaria-tabela-rolagem">
-        <table className="secretaria-tabela">
-          <thead>
-            <tr>
-              <th>Quando</th>
-              <th>Aluno</th>
-              <th>Contato</th>
-              <th>Situação</th>
-              <th>Pagamento</th>
-              {PASSOS_UTEIS.map(p => <th key={p.passo}>{p.rotulo}</th>)}
-            </tr>
-          </thead>
-          <tbody>
-            {(inscricoes ?? []).map(i => {
-              const cobranca = ultimaCobranca.get(i.id)
-              const respostasDaPessoa = triagem.get(i.id)
-              const paga = i.status === 'paga' || i.status === 'triagem_concluida'
-              return <tr key={i.id} className={paga ? 'paga' : undefined}>
-                <td className="secretaria-quando">{dataHora(i.criado_em)}</td>
-                <td>
-                  <strong>{i.nome}</strong>
-                  <span className="secretaria-sub">{i.numero_inscricao ?? 'sem número'} · {maskCpf(i.cpf)}</span>
-                </td>
-                <td>
-                  {maskPhone(i.telefone)}
-                  <span className="secretaria-sub">{i.email ?? '—'}</span>
-                </td>
-                <td><span className={`secretaria-selo ${paga ? 'ok' : 'espera'}`}>{SITUACAO[i.status] ?? i.status}</span></td>
-                <td>
-                  {cobranca ? <>
-                    {cobranca.status}
-                    <span className="secretaria-sub">{cobranca.metodo} · {formatarBRL(cobranca.valor_centavos)}</span>
-                  </> : <span className="secretaria-sub">sem cobrança</span>}
-                </td>
-                {PASSOS_UTEIS.map(p => (
-                  <td key={p.passo} className="secretaria-triagem" title={triageQuestions[p.passo - 1]?.title}>
-                    {respostasDaPessoa?.has(p.passo) ? respostaLegivel(p.passo, respostasDaPessoa.get(p.passo)) : '—'}
-                  </td>
-                ))}
-              </tr>
-            })}
-          </tbody>
-        </table>
-      </div>
-    )}
-
+        </>,
+      },
+      {
+        id: 'diagnostico',
+        rotulo: 'Diagnóstico',
+        conteudo: <>
     <section className="secretaria-bloco">
       <h2>Checkpoint do webhook</h2>
       <p className="secretaria-bloco-legenda">
@@ -673,6 +716,9 @@ export default async function SecretariaPage({
         </p>
       </details>
     </section>
+        </>,
+      },
+    ]} />
 
     <p className="secretaria-rodape">
       Lista lida do banco no momento em que esta página abriu — atualize para ver o que entrou depois.
