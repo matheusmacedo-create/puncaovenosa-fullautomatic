@@ -32,6 +32,10 @@ Cada cobrança grava sua própria composição na coluna `pagamentos.itens`, e u
 
 Cobrar apenas a matrícula é aceito pelo modelo, mas **não está implementado no funil** — fica disponível para um downsell futuro.
 
+## Páginas legais
+
+`/politica-de-privacidade` e `/politica-de-reembolso` (`app/politica-de-privacidade/page.tsx`, `app/politica-de-reembolso/page.tsx`, moldura comum em `components/legal-page.tsx`) são páginas estáticas, fora do funil. `lib/course-data.ts` aponta `privacyPolicyUrl`/`refundPolicyUrl` para elas — é o que faz o link aparecer no rodapé da landing (`components/institutional-footer.tsx`) em vez do aviso de pendência; ficando `null`, some. O mesmo par de links aparece de novo dentro do funil, logo abaixo do `PriceBreakdown`, na etapa de dados e na de pagamento (`LegalNote` em `components/enrollment-flow.tsx`) — é o ponto onde o aluno está prestes a pagar, não só o rodapé da landing, que ele pode nunca ter visto ao entrar direto pelo anúncio. O conteúdo da política de privacidade segue o termo de tratamento de dados da própria Cruz Vermelha Brasileira (LGPD, Lei nº 13.709/2018), adaptado ao que este formulário realmente coleta. O de reembolso cobre o direito de arrependimento de 7 dias corridos do art. 49 do CDC — o prazo de "5 dias úteis" para processar a devolução ali é um valor operacional, não legal; ajuste se a secretaria trabalhar com outro prazo.
+
 ## Arquitetura de dados
 
 Todo acesso ao banco passa por route handlers no servidor. As três tabelas têm RLS ligada e **forçada, sem nenhuma policy**, o que nega qualquer acesso pela chave publicável; o servidor usa a chave secreta, que ignora RLS.

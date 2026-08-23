@@ -56,7 +56,8 @@ export const courseData = {
    */
   maxSeatsPerClass: null as number | null,
   metaPixelId: PIXEL_ID,
-  privacyPolicyUrl: null as string | null,
+  privacyPolicyUrl: '/politica-de-privacidade' as string | null,
+  refundPolicyUrl: '/politica-de-reembolso' as string | null,
   institutionalIndicators: [] as InstitutionalIndicator[],
 }
 

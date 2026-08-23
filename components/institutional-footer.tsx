@@ -131,18 +131,28 @@ export function InstitutionalFooter() {
       <div className="border-t border-border bg-muted">
         <div className="mx-auto flex w-full max-w-[1120px] flex-col items-center gap-2 px-5 pb-24 pt-4 text-center text-xs text-muted-foreground sm:px-8 sm:pb-4 sm:flex-row sm:justify-between sm:text-left md:pb-4">
           <p>© {year} Cruz Vermelha Brasileira do Rio de Janeiro</p>
-          {courseData.privacyPolicyUrl ? (
-            <a
-              href={courseData.privacyPolicyUrl}
-              className="underline underline-offset-4 transition-colors hover:text-primary"
-            >
-              Política de Privacidade
-            </a>
-          ) : (
-            <PendingInfo>
-              Política de Privacidade oculta: sem página válida publicada ainda
-            </PendingInfo>
-          )}
+          <span className="flex items-center gap-4">
+            {courseData.privacyPolicyUrl ? (
+              <a
+                href={courseData.privacyPolicyUrl}
+                className="underline underline-offset-4 transition-colors hover:text-primary"
+              >
+                Política de Privacidade
+              </a>
+            ) : (
+              <PendingInfo>
+                Política de Privacidade oculta: sem página válida publicada ainda
+              </PendingInfo>
+            )}
+            {courseData.refundPolicyUrl && (
+              <a
+                href={courseData.refundPolicyUrl}
+                className="underline underline-offset-4 transition-colors hover:text-primary"
+              >
+                Cancelamento e Reembolso
+              </a>
+            )}
+          </span>
         </div>
       </div>
     </footer>
