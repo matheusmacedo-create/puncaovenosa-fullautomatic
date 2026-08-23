@@ -135,6 +135,8 @@ As rotas de pagamento declaram `maxDuration = 60`. A criação de cobrança no c
 4. Para conseguir percorrer o funil sem provedor de pagamento, adicionar `SIMULAR_PAGAMENTO` com valor `true`. **Remova essa variável antes de receber aluno de verdade.**
 5. Deploy. Cada push na `main` gera um novo deploy, e cada pull request ganha uma URL de preview própria.
 
+`vercel.json` fixa a função em `gru1` (São Paulo) — sem isso, a região padrão da Vercel costuma ficar nos EUA, e cada chamada à Únicopag e ao Supabase (ambos no Brasil) paga travessia transatlântica de ida e volta. É a razão mais provável de uma cobrança PIX levar vários segundos a mais do que devia. **`regions` em `vercel.json` só tem efeito no plano Pro** — no Hobby, a Vercel ignora essa configuração e mantém a região padrão dela; o arquivo fica pronto para quando (ou se) o projeto migrar de plano.
+
 ### Diagnóstico
 
 `GET /api/diagnostico` responde o estado da configuração num ambiente onde não dá para abrir o terminal — o preview do v0, um deploy na Vercel:
