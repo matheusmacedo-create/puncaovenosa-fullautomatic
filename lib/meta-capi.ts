@@ -65,14 +65,20 @@ export function contextoDoNavegador(request: Request): Contexto {
 
 const hash = (valor: string) => createHash('sha256').update(valor.trim().toLowerCase()).digest('hex')
 
+// Acento derruba a correspondência por cidade ("São Paulo" x "Sao Paulo") —
+// o Meta pede o texto normalizado antes do hash, e só para cidade isso
+// costuma variar entre as fontes.
+const semAcentos = (valor: string) => valor.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+
 function nomeESobrenome(nomeCompleto: string) {
   const [primeiro, ...resto] = nomeCompleto.trim().split(/\s+/)
   return { primeiro, sobrenome: resto.join(' ') || null }
 }
 
 type DadosDaInscricao = { nome: string; cpf: string; telefone: string; email: string | null }
+type Endereco = { cidade: string | null; uf: string | null; cep: string | null }
 
-function montarUserData(inscricao: DadosDaInscricao, contexto?: Contexto) {
+function montarUserData(inscricao: DadosDaInscricao, contexto?: Contexto, endereco?: Endereco | null) {
   const { primeiro, sobrenome } = nomeESobrenome(inscricao.nome)
   return {
     // Hash sempre em minúsculo e sem espaço nas pontas — é a exigência do Meta.
@@ -81,6 +87,12 @@ function montarUserData(inscricao: DadosDaInscricao, contexto?: Contexto) {
     ...(inscricao.email ? { em: hash(inscricao.email) } : {}),
     fn: hash(primeiro),
     ...(sobrenome ? { ln: hash(sobrenome) } : {}),
+    // Fixo: o curso é presencial na sede do Rio de Janeiro, então é seguro
+    // afirmar o país mesmo sem a inscrição ter informado endereço ainda.
+    country: hash('br'),
+    ...(endereco?.cidade ? { ct: hash(semAcentos(endereco.cidade)) } : {}),
+    ...(endereco?.uf ? { st: hash(endereco.uf) } : {}),
+    ...(endereco?.cep ? { zp: hash(endereco.cep.replace(/\D/g, '')) } : {}),
     ...(contexto?.ip ? { client_ip_address: contexto.ip } : {}),
     ...(contexto?.userAgent ? { client_user_agent: contexto.userAgent } : {}),
     ...(contexto?.fbp ? { fbp: contexto.fbp } : {}),
@@ -88,7 +100,13 @@ function montarUserData(inscricao: DadosDaInscricao, contexto?: Contexto) {
   }
 }
 
-async function buscarDados(inscricaoId: string, pagamentoId?: string) {
+/**
+ * Cidade/UF/CEP só existem a partir do passo 1 da triagem — bem depois do
+ * Lead, do AddPaymentInfo e do Purchase, que disparam antes de a pessoa
+ * chegar lá. Por isso só é buscado quando `comEndereco` pede: nas outras
+ * etapas seria sempre nulo, e uma consulta a mais no banco por nada.
+ */
+async function buscarDados(inscricaoId: string, pagamentoId?: string, comEndereco?: boolean) {
   const supabase = supabaseServer()
 
   const { data: inscricao, error } = await supabase
@@ -112,7 +130,19 @@ async function buscarDados(inscricaoId: string, pagamentoId?: string) {
     valorCentavos = pagamento?.valor_centavos ?? null
   }
 
-  return { inscricao, valorCentavos }
+  let endereco: Endereco | null = null
+  if (comEndereco) {
+    const { data: passo1 } = await supabase
+      .from('triagem_respostas')
+      .select('resposta')
+      .eq('inscricao_id', inscricaoId)
+      .eq('passo', 1)
+      .maybeSingle()
+    const r = passo1?.resposta as { cidade?: string | null; uf?: string | null; cep?: string | null } | undefined
+    if (r) endereco = { cidade: r.cidade ?? null, uf: r.uf ?? null, cep: r.cep ?? null }
+  }
+
+  return { inscricao, valorCentavos, endereco }
 }
 
 async function registrar(
@@ -142,9 +172,9 @@ async function enviar(inscricaoId: string, etapa: NomeDaEtapa, opts: { pagamento
   // à Conversions API — só existem como marco do dataLayer.
   if (!evento) return
 
-  const dados = await buscarDados(inscricaoId, opts.pagamentoId)
+  const dados = await buscarDados(inscricaoId, opts.pagamentoId, etapa === 'triagemFim')
   if (!dados) return
-  const { inscricao, valorCentavos } = dados
+  const { inscricao, valorCentavos, endereco } = dados
 
   const customData: Record<string, unknown> = { content_name: 'Curso de Punção Venosa' }
   if (comValor) {
@@ -168,7 +198,7 @@ async function enviar(inscricaoId: string, etapa: NomeDaEtapa, opts: { pagamento
       event_id: eventId,
       event_source_url: siteUrl() ?? undefined,
       action_source: 'website',
-      user_data: montarUserData(inscricao, opts.contexto),
+      user_data: montarUserData(inscricao, opts.contexto, endereco),
       custom_data: customData,
     }],
     ...(CODIGO_DE_TESTE() ? { test_event_code: CODIGO_DE_TESTE() } : {}),
