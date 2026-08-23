@@ -168,9 +168,6 @@ async function registrar(
 
 async function enviar(inscricaoId: string, etapa: NomeDaEtapa, opts: { pagamentoId?: string; contexto?: Contexto }) {
   const { nome, evento, comValor } = ETAPAS[etapa] as Etapa
-  // Etapas sem evento padrão do Meta (triagemInicio, ficha) não interessam
-  // à Conversions API — só existem como marco do dataLayer.
-  if (!evento) return
 
   const dados = await buscarDados(inscricaoId, opts.pagamentoId, etapa === 'triagemFim')
   if (!dados) return
@@ -189,18 +186,31 @@ async function enviar(inscricaoId: string, etapa: NomeDaEtapa, opts: { pagamento
 
   // O mesmo id que o pixel do navegador usa no `eventID` — é o que faz o
   // Meta reconhecer as duas chamadas como o mesmo evento, não duas vendas.
+  // O navegador usa o MESMO id pros dois disparos (`trackCustom` do nome
+  // próprio e `track` do evento padrão) — então os dois pares (nome, id) e
+  // (padrão, id) precisam existir aqui também, cada um deduplicando com o
+  // seu par do lado do pixel.
   const eventId = `${nome}:${opts.pagamentoId ?? inscricaoId}`
+  const base = {
+    event_time: Math.floor(Date.now() / 1000),
+    event_source_url: siteUrl() ?? undefined,
+    action_source: 'website' as const,
+    user_data: montarUserData(inscricao, opts.contexto, endereco),
+    custom_data: customData,
+  }
+
+  /*
+   * Sem isto, só o evento padrão (Lead, Purchase, ...) ganhava a cópia do
+   * servidor — o evento com nome próprio (funil_3_dados, funil_5_pago, ...),
+   * que é o que desenha o funil completo no Gerenciador, ficava só com o
+   * que o pixel do navegador manda sozinho, e por isso pontuava mais baixo
+   * na qualidade de correspondência mesmo com a Conversions API configurada.
+   */
+  const eventos = [{ ...base, event_name: nome, event_id: eventId }]
+  if (evento) eventos.push({ ...base, event_name: evento, event_id: eventId })
 
   const corpo = {
-    data: [{
-      event_name: evento,
-      event_time: Math.floor(Date.now() / 1000),
-      event_id: eventId,
-      event_source_url: siteUrl() ?? undefined,
-      action_source: 'website',
-      user_data: montarUserData(inscricao, opts.contexto, endereco),
-      custom_data: customData,
-    }],
+    data: eventos,
     ...(CODIGO_DE_TESTE() ? { test_event_code: CODIGO_DE_TESTE() } : {}),
   }
 
