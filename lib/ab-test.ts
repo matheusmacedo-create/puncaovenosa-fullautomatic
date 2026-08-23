@@ -1,4 +1,6 @@
-export type Variant = 'a' | 'b'
+import { CHAVES, type Variant } from '@/lib/paginas-de-venda'
+
+export type { Variant }
 
 export const VARIANT_STORAGE_KEY = 'pv_variant'
 export const VARIANT_COOKIE = 'pv_variant'
@@ -6,58 +8,33 @@ export const VARIANT_COOKIE = 'pv_variant'
 export function normalizeVariant(value?: string | string[] | null): Variant | null {
   const raw = Array.isArray(value) ? value[0] : value
   const parsed = raw?.toLowerCase()
-  return parsed === 'a' || parsed === 'b' ? parsed : null
+  // Valida contra o registro, e não contra uma lista escrita à mão: uma
+  // página nova passa a ser aceita em `?variant=` sem tocar aqui.
+  return parsed && (CHAVES as string[]).includes(parsed) ? (parsed as Variant) : null
 }
 
 /**
- * Variante explicitamente pedida na URL (?variant=a|b), lida no servidor.
- * Retorna null quando não há parâmetro, caso em que o sorteio 50/50
- * acontece no cliente para não quebrar o cache da rota estática.
+ * Página pedida explicitamente na URL (`?variant=a|b`), lida no servidor.
+ *
+ * Continua funcionando para não quebrar anúncio já publicado apontando para
+ * `/?variant=b`. O endereço novo de cada página é `/lp/[slug]`.
  */
 export function resolveVariant(value?: string | string[] | null): Variant | null {
   return normalizeVariant(value)
 }
 
 /**
- * Resolve a variante no cliente: parâmetro da URL tem prioridade, depois o
- * valor persistido e, na ausência de ambos, sorteio 50/50. O resultado é
- * gravado em cookie e localStorage para que o visitante permaneça na mesma
- * variante em recarregamentos e retornos.
+ * Grava a página vista, para o funil saber de onde a pessoa veio.
+ *
+ * O cookie é o que liga a landing ao checkout: dentro da gaveta em iframe não
+ * há `?variant=` na URL, e sem isto a matrícula seria creditada à página
+ * errada. 90 dias para quem volta depois continuar contando para a mesma.
  */
-export function resolveClientVariant(): Variant {
-  if (typeof window === 'undefined') return 'a'
-
-  const fromUrl = normalizeVariant(new URLSearchParams(window.location.search).get('variant'))
-  if (fromUrl) {
-    persistVariant(fromUrl)
-    return fromUrl
-  }
-
-  const stored = readStoredVariant()
-  if (stored) return stored
-
-  const assigned: Variant = Math.random() < 0.5 ? 'a' : 'b'
-  persistVariant(assigned)
-  return assigned
-}
-
-function readStoredVariant(): Variant | null {
-  try {
-    const fromStorage = normalizeVariant(window.localStorage.getItem(VARIANT_STORAGE_KEY))
-    if (fromStorage) return fromStorage
-  } catch {
-    // localStorage indisponível (modo privado); segue para o cookie.
-  }
-
-  const match = document.cookie.match(new RegExp(`(?:^|; )${VARIANT_COOKIE}=([^;]*)`))
-  return normalizeVariant(match?.[1] ?? null)
-}
-
-function persistVariant(variant: Variant) {
+export function persistVariant(variant: Variant) {
   try {
     window.localStorage.setItem(VARIANT_STORAGE_KEY, variant)
   } catch {
-    // Ignora falha de storage e mantém o cookie como fonte.
+    // localStorage indisponível (modo privado); o cookie basta.
   }
   document.cookie = `${VARIANT_COOKIE}=${variant}; path=/; max-age=${60 * 60 * 24 * 90}; samesite=lax`
 }
