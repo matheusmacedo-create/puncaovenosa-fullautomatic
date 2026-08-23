@@ -3,6 +3,7 @@ import type { Metadata, Viewport } from 'next'
 import { Archivo, Inter, JetBrains_Mono } from 'next/font/google'
 import { CheckoutOverlayProvider } from '@/components/checkout-overlay'
 import { EmbeddedFlag } from '@/components/embedded-flag'
+import { MetaPixel } from '@/components/meta-pixel'
 import { siteUrl } from '@/lib/site-url'
 import './globals.css'
 
@@ -77,6 +78,8 @@ export default function RootLayout({
   return (
     <html lang="pt-BR" className={`${archivo.variable} ${inter.variable} ${mono.variable} bg-background`}>
       <body className="font-sans antialiased">
+        {/* Em todas as páginas: o funil também é rastreado, não só a landing. */}
+        <MetaPixel />
         <EmbeddedFlag />
         <CheckoutOverlayProvider>{children}</CheckoutOverlayProvider>
         {process.env.NODE_ENV === 'production' && <Analytics />}

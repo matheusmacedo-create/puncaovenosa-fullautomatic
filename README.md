@@ -195,6 +195,31 @@ supabase/migrations/    Schema versionado
 public/                 Ícones, manifest PWA e service worker
 ```
 
+## Rastreamento (Pixel do Meta)
+
+Oito etapas nomeadas, uma por trecho real do funil, definidas num lugar só (`lib/rastreio.ts`) para nunca terem dois nomes ou aparecerem em ordem trocada no gerenciador de eventos:
+
+| # | Etapa | Onde dispara | Evento padrão do Meta |
+| --- | --- | --- | --- |
+| 1 | `funil_1_landing` | A landing carregou | `ViewContent` |
+| 2 | `funil_2_cta` | Clique em qualquer CTA de matrícula | `InitiateCheckout` |
+| 3 | `funil_3_dados` | Nome, CPF e e-mail salvos | `Lead` |
+| 4 | `funil_4_pagamento` | Existe cobrança pendente esperando pagamento | `AddPaymentInfo` |
+| 5 | `funil_5_pago` | Pagamento confirmado | `Purchase` |
+| 6 | `funil_6_triagem_inicio` | Entrou no passo 1 da triagem | — |
+| 7 | `funil_7_triagem_fim` | As 8 perguntas foram respondidas | `CompleteRegistration` |
+| 8 | `funil_8_ficha` | Abriu a ficha do aluno, com a vaga já garantida | — |
+
+A numeração no nome não é enfeite: o gerenciador do Meta lista eventos em ordem alfabética, e sem ela `funil_pago` apareceria antes de `funil_dados`.
+
+Sem `NEXT_PUBLIC_META_PIXEL_ID`, nada disto instala nenhum script — nem o pixel, nem um ID fictício. A leitura da variável vive isolada em `lib/pixel-id.ts`, fora de `lib/rastreio.ts` (que é `'use client'`): o componente que injeta o script (`components/meta-pixel.tsx`) é renderizado por `app/layout.tsx`, um Server Component, e um Server Component que importa uma constante de um módulo `'use client'` não pega o valor real — pega uma referência que o bundler não resolve fora do cliente, e ela chega serializada como texto de erro. Foi exatamente esse bug: com o ID vindo de `lib/rastreio.ts`, `!PIXEL_ID` dava falso mesmo sem variável nenhuma configurada, e o pixel era instalado do mesmo jeito.
+
+Cada etapa de dinheiro (4 e 5) exige `valorCentavos` explícito — nunca uma constante do build. `PRECO_CENTAVOS` é fixo no bundle; a cobrança é uma linha do banco, e as duas podem discordar se o preço de teste mudar no meio de uma sessão com cobrança já aberta. Etapas com valor sem esse campo emitem um aviso no console em vez de reportar um número que não foi cobrado.
+
+Repetição é tratada em duas camadas: `umaVezSo` grava em `sessionStorage` para não repetir o mesmo evento na mesma aba (a tela de pagamento consulta o servidor a cada 10s, e pode revisitar "confirmado" mais de uma vez), e um `id` (da inscrição ou da cobrança) vira `eventID` do Meta, que descarta a repetição mesmo vinda de outro dispositivo ou de uma segunda aba.
+
+Verificado com Playwright interceptando `/api/*` e substituindo `window.fbq` por uma função que só grava o que recebeu: as 8 etapas disparam na ordem certa, sem faltar e sem duplicar; os eventos de dinheiro carregam o valor real da cobrança simulada, não o preço do build; reentrar na tela de pagamento com a cobrança já confirmada não duplica o `Purchase`; e sem a variável de ambiente, nenhum vestígio do pixel aparece no HTML.
+
 ## Pontos de integração pendentes
 
 O funil está ligado à **Únicopag** em produção. PIX e cartão criam cobrança de verdade.

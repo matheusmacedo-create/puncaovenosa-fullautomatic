@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { rota } from '@/lib/http'
 import { formatarBRL, PRECO_CENTAVOS, PRECO_DE_TESTE } from '@/lib/enrollment'
 import { planilhaConfigurada } from '@/lib/planilha'
+import { PIXEL_ID } from '@/lib/pixel-id'
 import { estadoDaSecretaria } from '@/lib/secretaria'
 import { lerInscricaoId } from '@/lib/session'
 import { confirmacaoManualPermitida, estadoDaSimulacao } from '@/lib/simulacao'
@@ -118,6 +119,8 @@ export function GET(request: Request) {
       planilha: { configurada: planilhaConfigurada() },
       // Também opcional: sem senha, /secretaria responde 404.
       secretaria: estadoDaSecretaria(),
+      // Também opcional: sem ID, nenhum pixel fictício é instalado.
+      metaPixel: { configurado: PIXEL_ID !== null },
       preco: {
         centavos: PRECO_CENTAVOS,
         exibido: formatarBRL(PRECO_CENTAVOS),

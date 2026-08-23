@@ -6,6 +6,7 @@ import { ClinicalHeader } from '@/components/clinical-header'
 import { cepDaResposta, type Endereco, pesquisaValida, resumoDoEndereco } from '@/lib/cep'
 import { digits, loadJson, maskCep, ROTA_INSCRICAO, saveJson, STORAGE_KEYS, TriageAnswers, triageQuestions } from '@/lib/enrollment'
 import { buscarEnderecoDoCep, ErroDaApi, buscarTriagem, pesquisarEnderecos, salvarResposta } from '@/lib/api-cliente'
+import { rastrear } from '@/lib/rastreio'
 
 export function TriageFlow({ step }: { step: number }) {
   const router = useRouter()
@@ -26,6 +27,12 @@ export function TriageFlow({ step }: { step: number }) {
       .catch(() => undefined)
   }, [])
 
+  // Etapa 6: entrou na triagem. Só no passo 1 — os outros sete são
+  // continuação, não uma nova chegada.
+  useEffect(() => {
+    if (step === 1) rastrear('triagemInicio', { umaVezSo: true })
+  }, [step])
+
   const save = (value: string | string[] | boolean[]) => {
     const next = { ...answers, [key]: value }
     setAnswers(next); saveJson(STORAGE_KEYS.triage, next)
@@ -33,7 +40,12 @@ export function TriageFlow({ step }: { step: number }) {
     // uma falha aqui, e o passo é reenviado se o aluno voltar nele.
     salvarResposta(step, value).catch(() => undefined)
   }
-  const next = () => step === 8 ? router.push('/minha-inscricao') : router.push(`/triagem/${step + 1}`)
+  const next = () => {
+    // Etapa 7: as 8 perguntas foram respondidas. É o CompleteRegistration —
+    // a inscrição está pronta, com dados suficientes para montar a turma.
+    if (step === 8) rastrear('triagemFim', { umaVezSo: true })
+    step === 8 ? router.push('/minha-inscricao') : router.push(`/triagem/${step + 1}`)
+  }
   const back = () => step === 1 ? router.push(`${ROTA_INSCRICAO}?etapa=confirmado`) : router.push(`/triagem/${step - 1}`)
   const choose = (value: string) => { save(value); window.setTimeout(next, 200) }
   const value = answers[key]

@@ -1,4 +1,5 @@
 import { normalizeVariant, VARIANT_COOKIE, type Variant } from '@/lib/ab-test'
+import { rastrear } from '@/lib/rastreio'
 
 export type CtaPosition = 'hero' | 'content' | 'offer' | 'sticky' | 'final'
 
@@ -35,6 +36,7 @@ export function currentUtms(): Record<string, string> {
   return utms
 }
 
+/** Eventos que não são etapa do funil continuam só no dataLayer. */
 function push(detail: Record<string, unknown>) {
   const w = window as typeof window & { dataLayer?: unknown[] }
   w.dataLayer = w.dataLayer || []
@@ -63,68 +65,28 @@ export function buildCheckoutUrl(checkoutUrl: string, position: CtaPosition) {
   }
 }
 
-/** landing_view — carregamento da landing. */
+/** Etapa 1 do funil: a landing foi vista. */
 export function trackLandingView(variant: Variant) {
   if (typeof window === 'undefined') return
-  push({ event: 'landing_view', variant, ...currentUtms() })
+  rastrear('landing', { dados: { variant, ...currentUtms() }, umaVezSo: true })
 }
 
-/** cta_click — clique em qualquer CTA de matrícula. */
+/**
+ * Etapa 2: clique num CTA de matrícula.
+ *
+ * Era um par de eventos (`cta_click` e `initiate_checkout`) disparados sempre
+ * juntos, do mesmo clique. Virou um só: dois nomes para o mesmo gesto rendiam
+ * dois números iguais no relatório e a dúvida de qual olhar.
+ */
 export function trackCtaClick(position: CtaPosition) {
   if (typeof window === 'undefined') return
-  push({ event: 'cta_click', cta_position: position, variant: currentVariant(), ...currentUtms() })
+  rastrear('cta', { dados: { cta_position: position, variant: currentVariant(), ...currentUtms() } })
 }
 
 export type FooterContactTarget = 'whatsapp' | 'email' | 'instagram' | 'facebook' | 'maps'
 
-/** footer_contact_click — clique em contato no rodapé ou na seção de localização. */
+/** Contato no rodapé: não é etapa do funil, é saída para outro canal. */
 export function trackFooterContactClick(destination: FooterContactTarget) {
   if (typeof window === 'undefined') return
   push({ event: 'footer_contact_click', destination, variant: currentVariant() })
-}
-
-type InitiateCheckoutPayload = {
-  position: CtaPosition
-  value: number
-  totalValue: number
-  courseName: string
-  metaPixelId: string | null
-}
-
-/**
- * initiate_checkout — entrada no checkout.
- * A conversão principal (matricula_paid) é registrada pelo checkout após o
- * pagamento confirmado, com variant, valor e transaction_id.
- */
-export function trackInitiateCheckout({
-  position,
-  value,
-  totalValue,
-  courseName,
-  metaPixelId,
-}: InitiateCheckoutPayload) {
-  if (typeof window === 'undefined') return
-
-  const variant = currentVariant()
-  push({
-    event: 'initiate_checkout',
-    cta_position: position,
-    value,
-    total_value: totalValue,
-    currency: 'BRL',
-    course_name: courseName,
-    variant,
-    ...currentUtms(),
-  })
-
-  const w = window as typeof window & { fbq?: (...args: unknown[]) => void }
-  if (metaPixelId && typeof w.fbq === 'function') {
-    w.fbq('track', 'InitiateCheckout', {
-      value,
-      currency: 'BRL',
-      content_name: courseName,
-      cta_position: position,
-      variant,
-    })
-  }
 }

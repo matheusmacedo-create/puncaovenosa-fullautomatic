@@ -4,12 +4,7 @@ import { useRef, useState } from 'react'
 import { ArrowRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { courseData, CTA_LABEL } from '@/lib/course-data'
-import {
-  buildCheckoutUrl,
-  trackCtaClick,
-  trackInitiateCheckout,
-  type CtaPosition,
-} from '@/lib/checkout'
+import { buildCheckoutUrl, trackCtaClick, type CtaPosition } from '@/lib/checkout'
 import { useCheckoutOverlay } from '@/components/checkout-overlay'
 
 type CtaButtonProps = {
@@ -39,13 +34,6 @@ export function CtaButton({
 
   function handleClick(event: React.MouseEvent<HTMLAnchorElement>) {
     trackCtaClick(position)
-    trackInitiateCheckout({
-      position,
-      value: courseData.registrationPrice,
-      totalValue: courseData.totalPrice,
-      courseName: courseData.courseName,
-      metaPixelId: courseData.metaPixelId,
-    })
 
     setPressed(true)
     if (timer.current) clearTimeout(timer.current)

@@ -16,6 +16,7 @@ import {
   buscarCobranca, Cobranca, confirmarCobranca, consultarCpf, criarCobranca, encerrarCobranca,
   ErroDaApi, salvarInscricao,
 } from '@/lib/api-cliente'
+import { rastrear } from '@/lib/rastreio'
 
 type Stage = 'dados' | 'pagamento' | 'confirmado'
 type Cadastro = { primeiroNome: string; telefoneFinal: string; jaPaga: boolean }
@@ -59,6 +60,19 @@ export function EnrollmentFlow() {
 
   const go = useCallback((next: Stage) => router.push(`${ROTA_INSCRICAO}?etapa=${next}`), [router])
 
+  /**
+   * Etapa 5: dinheiro confirmado. O `id` da cobrança vira `eventID` do Meta,
+   * que descarta a repetição mesmo vinda de outra aba ou de outro
+   * dispositivo — a tela de pagamento é consultada em intervalos e pode
+   * chegar aqui mais de uma vez para a mesma venda.
+   *
+   * `valorCentavos` é sempre o valor gravado na cobrança, nunca uma
+   * constante do build — é o número que a Únicopag de fato cobrou.
+   */
+  const registrarVenda = useCallback((pagamentoId: string, valorCentavos: number) => {
+    rastrear('pago', { id: pagamentoId, valorCentavos, umaVezSo: true })
+  }, [])
+
   // Aberto pela gaveta da landing, fechar é fechar a gaveta — quem navega é
   // a página de fora. Aberto direto em `/inscricao`, volta para a landing.
   const close = () => {
@@ -95,6 +109,9 @@ export function EnrollmentFlow() {
     setEnviando(true); setErroGeral('')
     try {
       const salva = await salvarInscricao(data)
+      // Etapa 3: nome, CPF e e-mail entregues. É o Lead do funil — daqui a
+      // secretaria já consegue falar com a pessoa, tenha ela pago ou não.
+      rastrear('dados', { id: salva.id, umaVezSo: true })
       if (salva.jaPaga) { go('confirmado'); return }
       go('pagamento')
     } catch (e) {
@@ -110,10 +127,18 @@ export function EnrollmentFlow() {
       try {
         const atual = await buscarCobranca()
         if (cancelado) return
-        if (atual.existe && atual.status === 'pendente') { setCobranca(atual); setMetodo(atual.metodo); return }
-        if (atual.existe && atual.status === 'confirmado') { go('confirmado'); return }
+        if (atual.existe && atual.status === 'pendente') {
+          setCobranca(atual); setMetodo(atual.metodo)
+          rastrear('pagamento', { dados: { metodo: atual.metodo }, id: atual.id, valorCentavos: atual.valorCentavos, umaVezSo: true })
+          return
+        }
+        if (atual.existe && atual.status === 'confirmado') { registrarVenda(atual.id, atual.valorCentavos); go('confirmado'); return }
         const nova = await criarCobranca({ metodo: 'pix' })
-        if (!cancelado) setCobranca(nova)
+        if (cancelado) return
+        setCobranca(nova)
+        // Etapa 4: existe uma cobrança de verdade esperando pagamento. Só
+        // aqui, e não ao abrir a tela, porque sem cobrança não há o que pagar.
+        rastrear('pagamento', { dados: { metodo: nova.metodo }, id: nova.id, valorCentavos: nova.valorCentavos, umaVezSo: true })
       } catch (e) {
         if (!cancelado) setErroGeral(e instanceof ErroDaApi ? e.message : 'Não foi possível abrir a cobrança.')
       }
@@ -128,7 +153,7 @@ export function EnrollmentFlow() {
       try {
         const atual = await buscarCobranca()
         if (!atual.existe) return
-        if (atual.status === 'confirmado') { go('confirmado'); return }
+        if (atual.status === 'confirmado') { registrarVenda(atual.id, atual.valorCentavos); go('confirmado'); return }
         if (atual.status !== cobranca.status) setCobranca(atual)
       } catch { /* rede instável: a próxima rodada tenta de novo */ }
     }, INTERVALO_POLLING)
@@ -183,8 +208,8 @@ export function EnrollmentFlow() {
   }
 
   /** Confirma a cobrança e leva para a etapa seguinte. */
-  const aprovar = useCallback(async (pagamentoId: string) => {
-    try { await confirmarCobranca(pagamentoId); go('confirmado') }
+  const aprovar = useCallback(async (pagamentoId: string, valorCentavos: number) => {
+    try { await confirmarCobranca(pagamentoId); registrarVenda(pagamentoId, valorCentavos); go('confirmado') }
     catch (e) { setErroGeral(e instanceof ErroDaApi ? e.message : 'Não foi possível confirmar o pagamento.') }
   }, [go])
 
@@ -194,7 +219,7 @@ export function EnrollmentFlow() {
     navigator.vibrate?.(35); setCopied(true); window.setTimeout(() => setCopied(false), 2000)
     // [SIMULAÇÃO] Sem provedor, copiar o código é o gatilho de "já paguei".
     // A pausa existe só para o aluno ver o aviso de copiado antes da troca de tela.
-    if (cobranca.simulacao) window.setTimeout(() => aprovar(cobranca.id), 1200)
+    if (cobranca.simulacao) window.setTimeout(() => aprovar(cobranca.id, cobranca.valorCentavos), 1200)
   }
 
   /**
@@ -220,8 +245,8 @@ export function EnrollmentFlow() {
       setCobranca(nova)
       // O cartão costuma ter desfecho imediato. Sem isto, uma cobrança
       // aprovada de verdade ficava parada na tela de pagamento.
-      if (nova.status === 'confirmado') { go('confirmado'); return }
-      if (nova.simulacao) await aprovar(nova.id)
+      if (nova.status === 'confirmado') { registrarVenda(nova.id, nova.valorCentavos); go('confirmado'); return }
+      if (nova.simulacao) await aprovar(nova.id, nova.valorCentavos)
     } catch (e) {
       setErroGeral(e instanceof ErroDaApi ? e.message : 'Não foi possível processar o cartão.')
     } finally { setEnviando(false) }
@@ -230,7 +255,7 @@ export function EnrollmentFlow() {
   const simular = async (desfecho: 'pago' | 'expirado' | 'recusado') => {
     if (!cobranca) return
     try {
-      if (desfecho === 'pago') { await aprovar(cobranca.id); return }
+      if (desfecho === 'pago') { await aprovar(cobranca.id, cobranca.valorCentavos); return }
       await encerrarCobranca(cobranca.id, desfecho, desfecho === 'recusado' ? 'Simulação de recusa' : undefined)
       setCobranca(c => c && { ...c, status: desfecho })
     } catch (e) { setErroGeral(e instanceof ErroDaApi ? e.message : 'Falha na simulação.') }
