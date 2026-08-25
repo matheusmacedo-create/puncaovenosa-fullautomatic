@@ -72,6 +72,45 @@ export function POST(request: Request) {
     if (!inscricao) return erro('Inscrição não encontrada.', 404)
 
     const simulando = simulacaoAtiva()
+
+    // Cobrança PIX aberta é reaproveitada, não recriada: a chamada à Únicopag
+    // é o trecho lento do checkout, e o código antigo continua pagável no
+    // provedor. É também o que permite ao navegador disparar a criação já no
+    // envio do cadastro, sem medo de duplicar. A janela fica aquém da validade
+    // real (24h na Únicopag, 30 min na simulação) para nunca entregar um
+    // código que o app do banco vai recusar. Reaproveitar não redispara
+    // webhook nem evento do Meta — ambos são de transição, e a transição
+    // aconteceu quando a cobrança nasceu.
+    if (metodo === 'pix') {
+      const validaDesde = new Date(Date.now() - (simulando ? MINUTOS_PARA_EXPIRAR * 60_000 : 20 * 3_600_000)).toISOString()
+      const { data: aberta } = await supabase
+        .from('pagamentos')
+        .select('id, metodo, parcelas, valor_centavos, itens, status, pix_copia_cola, criado_em')
+        .eq('inscricao_id', inscricaoId)
+        .eq('metodo', 'pix')
+        .eq('status', 'pendente')
+        .not('pix_copia_cola', 'is', null)
+        .gte('criado_em', validaDesde)
+        .order('criado_em', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      if (aberta) {
+        return NextResponse.json({
+          id: aberta.id,
+          metodo: aberta.metodo,
+          parcelas: aberta.parcelas,
+          valorCentavos: aberta.valor_centavos,
+          itens: aberta.itens,
+          status: aberta.status,
+          pixCopiaCola: aberta.pix_copia_cola,
+          criadoEm: aberta.criado_em,
+          minutosParaExpirar: MINUTOS_PARA_EXPIRAR,
+          simulacao: simulando,
+          confirmacaoManual: confirmacaoManualPermitida(),
+        })
+      }
+    }
+
     const txid = crypto.randomUUID().replace(/-/g, '').slice(0, 25)
 
     let provedorId: string | null = null

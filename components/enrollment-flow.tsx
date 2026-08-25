@@ -46,6 +46,9 @@ export function EnrollmentFlow() {
   const [cartao, setCartao] = useState<DadosCartao>(CARTAO_VAZIO)
   const [agora, setAgora] = useState(0)
   const pointerStart = useRef<number | null>(null)
+  // Cobrança pedida no envio do cadastro, antes da tela de pagamento montar
+  // — a resposta da Únicopag corre em paralelo com a transição.
+  const cobrancaPrefetch = useRef<Promise<Cobranca> | null>(null)
 
   useEffect(() => setData(loadJson(STORAGE_KEYS.enrollment, EMPTY)), [])
   useEffect(() => {
@@ -131,6 +134,14 @@ export function EnrollmentFlow() {
       // secretaria já consegue falar com a pessoa, tenha ela pago ou não.
       rastrear('dados', { id: salva.id, umaVezSo: true })
       if (salva.jaPaga) { go('confirmado'); return }
+      // A cobrança começa aqui, não quando a tela de pagamento monta: a
+      // resposta da Únicopag é a espera dominante do checkout, e assim ela
+      // corre em paralelo com a transição. Sem risco de duplicar — o servidor
+      // reaproveita cobrança PIX aberta. O catch vazio só evita rejeição sem
+      // dono se a pessoa fechar antes; o erro de verdade é tratado por quem
+      // consome o prefetch.
+      cobrancaPrefetch.current = criarCobranca({ metodo: 'pix' })
+      cobrancaPrefetch.current.catch(() => undefined)
       go('pagamento')
     } catch (e) {
       setErroGeral(e instanceof ErroDaApi ? e.message : 'Não foi possível salvar. Tente novamente.')
@@ -143,6 +154,19 @@ export function EnrollmentFlow() {
     let cancelado = false
     ;(async () => {
       try {
+        // Veio do cadastro nesta mesma visita: a cobrança já está sendo
+        // criada desde o clique — só falta a resposta chegar. A consulta de
+        // cobrança existente fica para quem entra na etapa sem prefetch
+        // (recarregou a página ou voltou outro dia).
+        const prefetch = cobrancaPrefetch.current
+        if (prefetch) {
+          cobrancaPrefetch.current = null
+          const nova = await prefetch
+          if (cancelado) return
+          setCobranca(nova); setMetodo(nova.metodo)
+          rastrear('pagamento', { dados: { metodo: nova.metodo }, id: nova.id, valorCentavos: nova.valorCentavos, umaVezSo: true })
+          return
+        }
         const atual = await buscarCobranca()
         if (cancelado) return
         if (atual.existe && atual.status === 'pendente') {
@@ -398,7 +422,8 @@ function PaymentStage({ metodo, cobranca, copied, restante, enviando, erroGeral,
         ? <p className="simulation-banner" role="status">Cobrança real, com conferência manual liberada para teste. Remova a variável antes de receber aluno.</p>
         : null}
     {erroGeral && <p className="error" role="alert">{erroGeral}</p>}
-    {!cobranca && !erroGeral && metodo === 'pix' && <p className="payment-status"><Loader2 className="spin" /><span>Preparando o pagamento…</span></p>}
+    {/* Segura o aluno enquanto a Únicopag responde: sem isto a tela fica muda por alguns segundos, exatamente no momento em que o lead decide se espera ou fecha. */}
+    {!cobranca && !erroGeral && metodo === 'pix' && <div className="state-message pix-gerando" role="status"><Loader2 className="spin" /><h3>Gerando seu código PIX…</h3><p>Leva só alguns segundos. Não feche esta tela — o código aparece aqui e você paga direto no app do seu banco.</p></div>}
 
     {cobranca?.status === 'expirado' && cobranca.metodo === metodo ? <div className="state-message"><h3>Código expirado</h3><p>Este código não aceita mais pagamentos.</p><button className="primary-button full" onClick={gerarNovoCodigo}>Gerar novo código</button></div>
       : cobranca?.status === 'recusado' && cobranca.metodo === metodo ? <div className="state-message"><h3>Pagamento recusado</h3><p>{cobranca.recusaMotivo || 'O banco emissor não autorizou a cobrança.'}</p><button className="primary-button full" onClick={gerarNovoCodigo}>Tentar de novo</button></div>

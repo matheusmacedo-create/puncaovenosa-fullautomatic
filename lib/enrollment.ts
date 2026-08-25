@@ -75,8 +75,21 @@ export function isValidCpf(value: string) {
 
 export const EMAIL_PLAUSIVEL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
+// "Maria de" tem duas palavras e passava: nome que termina em conectivo ou em
+// letra solta ainda não terminou de ser digitado — já chegou assim de um
+// autopreenchimento de celular com o nome salvo pela metade. Esse nome vai na
+// credencial e no comprovante, então vale barrar aqui.
+const FIM_DE_NOME_INCOMPLETO = new Set(['de', 'da', 'do', 'das', 'dos', 'e'])
+
+export function nomeIncompleto(value: string) {
+  const palavras = value.trim().split(/\s+/).filter(Boolean)
+  if (palavras.length < 2) return true
+  const ultima = palavras[palavras.length - 1].toLowerCase().replace(/[^\p{L}]/gu, '')
+  return ultima.length < 2 || FIM_DE_NOME_INCOMPLETO.has(ultima)
+}
+
 export function fieldError(field: keyof EnrollmentData, data: EnrollmentData) {
-  if (field === 'name') return data.name.trim().split(/\s+/).length < 2 ? 'Digite seu nome e sobrenome.' : ''
+  if (field === 'name') return nomeIncompleto(data.name) ? 'Digite seu nome completo — ele vai na sua credencial do curso.' : ''
   if (field === 'email') {
     if (!data.email.trim()) return 'Informe seu e-mail — o comprovante do pagamento é enviado nele.'
     return EMAIL_PLAUSIVEL.test(data.email.trim()) ? '' : 'Confira o e-mail digitado.'
