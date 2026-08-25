@@ -181,6 +181,10 @@ h1,h2,h3,h4 { font-family: var(--font-archivo), sans-serif; letter-spacing: -.01
 .dev-tools button { min-height: 38px; padding: 6px 10px; border: 1px solid var(--rule); background: var(--card); cursor: pointer; font-size: 11px; }
 .state-message { border: 1px solid var(--rule); padding: 20px; margin-top: 16px; }
 .state-message h3 { font-size: 22px; }
+.pix-gerando { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; padding: 28px 20px; }
+.pix-gerando .spin { width: 28px; height: 28px; color: var(--cvb-red); }
+.pix-gerando h3 { font-size: 18px; }
+.pix-gerando p { margin: 0; color: var(--ink-soft); font-size: 13px; max-width: 320px; }
 .confirmation { min-height: 100%; display: flex; flex-direction: column; justify-content: center; text-align: center; align-items: center; }
 .confirmation .red-cross { transform: scale(2.2); margin-bottom: 40px; animation: cross-in .6s ease-out both; }
 .confirmation h2 { font-size: 42px; margin-bottom: 10px; }
