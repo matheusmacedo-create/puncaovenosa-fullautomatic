@@ -2,7 +2,7 @@ import { AlertTriangle, ListChecks, Package } from 'lucide-react'
 import { CtaButton } from '@/components/cta-button'
 import { Foto } from '@/components/foto'
 import { CtaReassurance } from '@/components/cta-reassurance'
-import { contentPhoto, courseData, formatBRL } from '@/lib/course-data'
+import { contentPhoto, courseData } from '@/lib/course-data'
 
 const highlights = [
   {
@@ -70,25 +70,31 @@ export function AppliedContentSection() {
             ))}
           </ul>
 
-          <div className="mt-10 rounded-md border border-primary/20 border-l-[3px] border-l-primary bg-primary/5 p-6">
+          {/*
+            Caixa branca com a mesma borda dos outros cartões da página, e não
+            um bloco tingido com barrinha de destaque na lateral: aquele era o
+            único elemento da landing desenhado assim, então em vez de chamar
+            atenção ele parecia um aviso de sistema colado no meio do texto.
+            Como a seção já corre sobre fundo cinza, o branco sozinho destaca.
+
+            O texto também encolheu. Havia "matrícula por R$ 99" na frase, no
+            rótulo do botão e de novo na linha de preço abaixo dele — o mesmo
+            número três vezes em quatro linhas —, e uma última linha repetindo
+            que a secretaria confirma a data, coisa que o parágrafo já diz.
+          */}
+          <div className="mt-10 rounded-md border border-border bg-background p-6">
             <h3 className="text-balance text-lg font-bold sm:text-xl">
               Dê o primeiro passo para participar de uma turma
             </h3>
             <p className="mt-2 max-w-[55ch] text-sm leading-relaxed text-muted-foreground">
-              Faça sua matrícula por {formatBRL(courseData.registrationPrice)}. Depois do pagamento,
-              você informa os dias e horários que funcionam melhor para participar.
+              Depois do pagamento você informa os dias e horários que funcionam melhor, e a
+              secretaria monta a turma a partir disso.
             </p>
 
-            <CtaButton
-              position="content"
-              label={`INICIAR MATRÍCULA POR ${formatBRL(courseData.registrationPrice)}`}
-              className="mt-5 w-full sm:w-auto"
-            />
+            {/* Sem rótulo próprio: o mesmo gesto tem o mesmo nome nos quatro CTAs. */}
+            <CtaButton position="content" className="mt-5 w-full sm:w-auto" />
 
             <CtaReassurance />
-            <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-              A data e o horário serão confirmados pela secretaria após a organização da turma.
-            </p>
           </div>
         </div>
       </div>
