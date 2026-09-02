@@ -55,6 +55,21 @@ export const courseData = {
    * Enquanto for null, nenhuma contagem de vagas aparece na página.
    */
   maxSeatsPerClass: null as number | null,
+  /**
+   * Quantas pessoas já se matricularam, para a prova social da página.
+   *
+   * Mesma regra da capacidade: só entra número conferido pela secretaria.
+   * Enquanto for null, a página não afirma nada sobre quantidade de alunos —
+   * inventar esse número é o tipo de coisa que destrói a confiança que a
+   * marca da instituição leva anos para construir.
+   */
+  studentsEnrolled: null as number | null,
+  /**
+   * Dias de arrependimento garantidos em `/politica-de-reembolso`, exibidos
+   * junto aos CTAs. Mudou lá, mude aqui — a página não pode prometer um
+   * prazo diferente do que a política publicada cumpre.
+   */
+  refundWindowDays: 7,
   metaPixelId: PIXEL_ID,
   privacyPolicyUrl: '/politica-de-privacidade' as string | null,
   refundPolicyUrl: '/politica-de-reembolso' as string | null,

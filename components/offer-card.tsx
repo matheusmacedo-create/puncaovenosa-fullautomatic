@@ -1,6 +1,7 @@
 import { Check, HeartHandshake } from 'lucide-react'
 import { Section, SectionTitle } from '@/components/section'
 import { CtaButton } from '@/components/cta-button'
+import { CtaReassurance } from '@/components/cta-reassurance'
 import { courseData, formatBRL, INSTITUTION_NAME, SCHOOL_NAME } from '@/lib/course-data'
 
 export function OfferCard() {
@@ -42,40 +43,46 @@ export function OfferCard() {
             Investimento
           </p>
 
+          {/*
+            A ordem anuncia a decisão: primeiro o que sai do bolso hoje, em
+            destaque, depois o que fica para o dia da aula, e o total por
+            último, apagado. O quadro abria com o total em corpo grande —
+            ancorava a leitura no número mais caro, que é justamente o que
+            faz a pessoa fechar a página.
+          */}
           <dl className="mt-4 flex flex-col gap-px overflow-hidden rounded-md border border-border bg-border">
-            <div className="flex items-baseline justify-between gap-4 bg-background px-4 py-3">
-              <dt className="text-sm text-muted-foreground">Matrícula</dt>
-              <dd className="text-sm font-semibold tabular-nums">
+            <div className="flex items-baseline justify-between gap-4 bg-muted px-4 py-4">
+              <dt className="text-sm font-semibold">
+                Você paga hoje
+                <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
+                  Matrícula — garante sua vaga
+                </span>
+              </dt>
+              <dd className="text-2xl font-bold tabular-nums text-primary">
                 {formatBRL(courseData.registrationPrice)}
               </dd>
             </div>
             <div className="flex items-baseline justify-between gap-4 bg-background px-4 py-3">
-              <dt className="text-sm text-muted-foreground">Curso de Punção Venosa</dt>
+              <dt className="text-sm text-muted-foreground">
+                Curso de Punção Venosa
+                <span className="mt-0.5 block text-xs text-muted-foreground">
+                  Até o dia da aula
+                </span>
+              </dt>
               <dd className="text-sm font-semibold tabular-nums">
                 {formatBRL(courseData.remainingPrice)}
               </dd>
             </div>
-            <div className="flex items-baseline justify-between gap-4 bg-muted px-4 py-3">
-              <dt className="text-sm font-semibold">Investimento total</dt>
-              <dd className="text-lg font-bold tabular-nums">
+            <div className="flex items-baseline justify-between gap-4 bg-background px-4 py-3">
+              <dt className="text-sm text-muted-foreground">Investimento total do curso</dt>
+              <dd className="text-sm font-semibold tabular-nums text-muted-foreground">
                 {formatBRL(courseData.totalPrice)}
               </dd>
             </div>
           </dl>
 
-          {/*
-            Quando cada parte vence, e não só quanto custa: são duas cobranças
-            de verdade, e quem não sabe disso na hora de pagar a matrícula
-            descobre no dia da aula — a pior hora possível.
-          */}
-          <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
-            Você paga a matrícula agora, e ela garante sua vaga. O curso você paga até o dia da aula.
-          </p>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Pagamento: {courseData.paymentMethods}
-          </p>
-
           <CtaButton position="offer" className="mt-6 w-full" />
+          <CtaReassurance showPrice={false} />
         </div>
       </div>
     </Section>

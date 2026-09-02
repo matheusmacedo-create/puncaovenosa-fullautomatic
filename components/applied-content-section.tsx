@@ -1,6 +1,7 @@
 import Image from 'next/image'
 import { AlertTriangle, ListChecks, Package } from 'lucide-react'
 import { CtaButton } from '@/components/cta-button'
+import { CtaReassurance } from '@/components/cta-reassurance'
 import { contentPhoto, courseData, formatBRL } from '@/lib/course-data'
 
 const highlights = [
@@ -93,10 +94,7 @@ export function AppliedContentSection() {
               className="mt-5 w-full sm:w-auto"
             />
 
-            <p className="mt-3 text-xs font-medium text-foreground/70">
-              Curso: {formatBRL(courseData.remainingPrice)} • Investimento total:{' '}
-              {formatBRL(courseData.totalPrice)}
-            </p>
+            <CtaReassurance compact />
             <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
               A data e o horário serão confirmados pela secretaria após a organização da turma.
             </p>

@@ -15,10 +15,14 @@ export type HeroCopy = {
 export const heroCopy: Record<Variant, HeroCopy> = {
   a: {
     kicker: 'CURSO PRESENCIAL • 8 HORAS • RIO DE JANEIRO',
-    headline: 'Curso de Punção Venosa',
-    institutionalLine: `Formação presencial da ${INSTITUTION_NAME}.`,
+    // O título era o nome do curso — um rótulo de catálogo. Para quem chega
+    // de anúncio e decide em segundos, ele precisa dizer o que a pessoa
+    // ganha e por que confiar: a técnica inteira num dia, e o nome da
+    // instituição, que é o ativo mais forte desta página.
+    headline: 'Entenda a punção venosa de ponta a ponta em um único dia',
+    institutionalLine: `Curso presencial com certificado da ${INSTITUTION_NAME}.`,
     subheadline:
-      'Em 8 horas, você compreende os fundamentos da técnica, os materiais, a biossegurança e a prevenção de complicações para chegar mais preparado à rotina dos serviços de saúde.',
+      'São 8 horas sobre a técnica, os materiais, a biossegurança e as complicações que você precisa saber reconhecer — organizadas para você sair com a sequência inteira na cabeça.',
   },
   b: {
     kicker: 'CURSO PRESENCIAL • 8 HORAS • RIO DE JANEIRO',
