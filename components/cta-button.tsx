@@ -56,9 +56,14 @@ export function CtaButton({
     open(target)
   }
 
+  // O rótulo carrega o preço ("FAZER MINHA MATRÍCULA POR R$ 99") e não cabe
+  // numa linha em tela de celular com o respiro de desktop: quebrava em duas
+  // linhas com a seta pendurada ao lado, centralizada entre elas. No estreito
+  // o botão aperta o respiro, reduz um ponto do texto e esconde a seta — que
+  // é decoração, não informação; a partir de `sm` volta tudo ao normal.
   const classes = cn(
     'inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-primary text-center font-semibold tracking-wide text-primary-foreground transition-[background-color,transform,box-shadow] duration-200 hover:bg-primary/90 hover:shadow-md active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary data-[pressed]:scale-[0.97] data-[pressed]:bg-primary/85',
-    size === 'default' ? 'px-7 py-4 text-base' : 'px-4 py-3 text-sm',
+    size === 'default' ? 'px-4 py-4 text-[15px] sm:px-7 sm:text-base' : 'px-4 py-3 text-sm',
     className,
   )
 
@@ -67,7 +72,10 @@ export function CtaButton({
       {label}
       {showArrow && (
         <ArrowRight
-          className={cn('size-4 shrink-0 transition-transform duration-200', pressed && 'translate-x-1')}
+          className={cn(
+            'hidden size-4 shrink-0 transition-transform duration-200 sm:block',
+            pressed && 'translate-x-1',
+          )}
           aria-hidden="true"
         />
       )}

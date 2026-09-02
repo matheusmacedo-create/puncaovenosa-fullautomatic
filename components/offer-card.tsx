@@ -19,7 +19,7 @@ export function OfferCard() {
       </SectionTitle>
 
       <div className="mt-8 grid gap-px overflow-hidden rounded-md border border-border bg-border md:grid-cols-[1.15fr_1fr]">
-        <div className="bg-background p-6 sm:p-8">
+        <div className="bg-background p-5 sm:p-8">
           <ul className="grid gap-3">
             {includedItems.map((item) => (
               <li key={item} className="flex items-start gap-3 text-[15px] leading-relaxed">
@@ -38,7 +38,7 @@ export function OfferCard() {
           </div>
         </div>
 
-        <div className="bg-background p-6 sm:p-8">
+        <div className="bg-background p-5 sm:p-8">
           <p className="text-[11px] font-semibold tracking-[0.16em] text-muted-foreground uppercase">
             Investimento
           </p>
