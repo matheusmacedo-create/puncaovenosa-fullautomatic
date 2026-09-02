@@ -10,6 +10,7 @@ import { confirmacaoManualPermitida, estadoDaSimulacao } from '@/lib/simulacao'
 import { supabaseServer } from '@/lib/supabase/server'
 import { siteUrl, urlDoWebhook } from '@/lib/site-url'
 import { consultarSaldo, UnicopagErro } from '@/lib/unicopag'
+import { emailConfigurado } from '@/lib/email'
 import { webhookSecretariaConfigurado } from '@/lib/webhook-secretaria'
 
 /**
@@ -121,6 +122,7 @@ export function GET(request: Request) {
       planilha: { configurada: planilhaConfigurada() },
       // Também opcional: sem as duas variáveis, nenhum evento é enviado.
       webhookSecretaria: { configurada: webhookSecretariaConfigurado() },
+      emailTransacional: { configurado: emailConfigurado() },
       // Também opcional: sem senha, /secretaria responde 404.
       secretaria: estadoDaSecretaria(),
       // Também opcional: sem ID, nenhum pixel fictício é instalado.

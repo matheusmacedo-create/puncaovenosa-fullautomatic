@@ -7,6 +7,7 @@ import { coordsDaResposta, resumoDaResposta } from '@/lib/cep'
 import {
   COBRA_CURSO_A_PARTE, formatarBRL, maskCpf, maskPhone, PRECO_CURSO_CENTAVOS, triageQuestions,
 } from '@/lib/enrollment'
+import { emailConfigurado } from '@/lib/email'
 import { metaCapiConfigurado } from '@/lib/meta-capi'
 import { audienciaConfigurada, JANELA_DE_ABANDONO_HORAS } from '@/lib/meta-audiencia'
 import { secretariaAutenticada, secretariaHabilitada } from '@/lib/secretaria'
@@ -48,6 +49,13 @@ const NOME_DO_EVENTO_META: Record<string, string> = {
   funil_4_pagamento: 'AddPaymentInfo (pagamento iniciado)',
   funil_5_pago: 'Purchase (pagamento confirmado)',
   funil_7_triagem_fim: 'CompleteRegistration (triagem concluída)',
+}
+
+const NOME_DO_EMAIL: Record<string, string> = {
+  cobranca_aberta: 'Código PIX enviado',
+  matricula_paga: 'Comprovante da matrícula',
+  curso_pago: 'Comprovante do curso',
+  triagem_concluida: 'Triagem recebida',
 }
 
 const STATUS_DE_FALHA = ['recusado', 'expirado', 'estornado']
@@ -286,6 +294,19 @@ export default async function SecretariaPage({
 
   const falhasRecentesMeta = (entregasMeta ?? []).filter(e => !e.sucesso).length
 
+  // Checkpoint dos e-mails ao aluno: mesma lógica dos dois acima. É o que
+  // torna visível um comprovante que a Resend recusou — sem isto, a promessa
+  // feita no formulário ("o comprovante do pagamento é enviado nele")
+  // continuaria quebrada sem ninguém saber.
+  const emailLigado = emailConfigurado()
+  const { data: entregasEmail, error: erroEntregasEmail } = await supabase
+    .from('email_entregas')
+    .select('id, inscricao_id, tipo, destinatario, sucesso, erro, criado_em')
+    .order('criado_em', { ascending: false })
+    .limit(50)
+
+  const falhasRecentesEmail = (entregasEmail ?? []).filter(e => !e.sucesso).length
+
   // Formatação toda aqui, no servidor: a tabela do cliente só desenha o que
   // recebe, sem precisar de máscara, moeda ou fuso do lado do navegador.
   // `busca` já vem normalizada para o filtro não repetir esse trabalho a
@@ -339,6 +360,7 @@ export default async function SecretariaPage({
     pagouSoTriagemFalta > 0 && { texto: `${pagouSoTriagemFalta} pagaram e não terminaram a triagem`, acao: 'Aba Inscrições, recorte "Pagou, falta triagem".' },
     falhasDePagamento > 0 && { texto: `${falhasDePagamento} cobranças recusadas, expiradas ou estornadas`, acao: 'Confira na coluna Pagamento da lista.' },
     falhasRecentes > 0 && { texto: `${falhasRecentes} entregas do webhook falharam`, acao: 'Aba Diagnóstico, bloco do webhook — dá para reenviar por lá.' },
+    falhasRecentesEmail > 0 && { texto: `${falhasRecentesEmail} e-mails ao aluno falharam`, acao: 'Aba Diagnóstico, bloco de e-mails. O comprovante prometido no cadastro não chegou.' },
     falhasRecentesMeta > 0 && { texto: `${falhasRecentesMeta} envios ao Meta falharam`, acao: 'Aba Diagnóstico, bloco do Pixel — dá para reenviar por lá.' },
   ].filter(Boolean) as { texto: string; acao: string }[]
 
@@ -570,6 +592,69 @@ export default async function SecretariaPage({
           com o motivo, e pode ser reenviada por aqui — sem retentativa automática.
         </p>
       </details>
+    </section>
+
+    <section className="secretaria-bloco">
+      <h2>Checkpoint dos e-mails ao aluno</h2>
+      <p className="secretaria-bloco-legenda">
+        O formulário de cadastro promete, na validação do próprio campo, que o comprovante do pagamento é enviado
+        no e-mail informado. Estes são os envios que cumprem essa promessa — o código PIX para quem quer pagar
+        depois, o comprovante da matrícula com o número da inscrição, o do curso e o aviso de triagem recebida.
+        Uma recusa da Resend (domínio não verificado, endereço inválido, cota) aparece aqui, e só aqui.
+      </p>
+
+      <div className={`secretaria-webhook-status ${emailLigado ? 'ok' : 'espera'}`}>
+        {emailLigado
+          ? 'Configurado — RESEND_API_KEY e EMAIL_REMETENTE definidas.'
+          : 'Não configurado. Sem RESEND_API_KEY e EMAIL_REMETENTE no ambiente, nenhum e-mail é enviado — o funil segue funcionando, mas o comprovante prometido no cadastro não chega.'}
+      </div>
+
+      {erroEntregasEmail ? (
+        <p className="secretaria-vazio">
+          O log de e-mails ainda não está disponível — provavelmente a migration <code>0015_email_entregas</code> não
+          foi aplicada neste banco ainda.
+        </p>
+      ) : !entregasEmail || entregasEmail.length === 0 ? (
+        <p className="secretaria-vazio">Nenhum e-mail enviado ainda.</p>
+      ) : (
+        <>
+          {falhasRecentesEmail > 0 && (
+            <p className="secretaria-erro" role="alert">
+              {falhasRecentesEmail} e-mail(s) com falha nos últimos {entregasEmail.length}.
+            </p>
+          )}
+          <div className="secretaria-tabela-rolagem">
+            <table className="secretaria-tabela">
+              <thead>
+                <tr>
+                  <th>Quando</th>
+                  <th>Mensagem</th>
+                  <th>Aluno</th>
+                  <th>Para</th>
+                  <th>Resultado</th>
+                  <th>Detalhe</th>
+                </tr>
+              </thead>
+              <tbody>
+                {entregasEmail.map(e => (
+                  <tr key={e.id}>
+                    <td className="secretaria-quando">{dataHora(e.criado_em)}</td>
+                    <td>{NOME_DO_EMAIL[e.tipo] ?? e.tipo}</td>
+                    <td>{nomePorInscricao.get(e.inscricao_id) ?? '—'}</td>
+                    <td className="secretaria-triagem">{e.destinatario}</td>
+                    <td>
+                      <span className={`secretaria-selo ${e.sucesso ? 'ok' : 'espera'}`}>
+                        {e.sucesso ? 'enviado' : 'falhou'}
+                      </span>
+                    </td>
+                    <td className="secretaria-triagem">{e.erro ?? '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
     </section>
 
     <section className="secretaria-bloco">

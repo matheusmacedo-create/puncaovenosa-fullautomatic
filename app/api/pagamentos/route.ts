@@ -13,6 +13,7 @@ import { supabaseServer } from '@/lib/supabase/server'
 import { contextoDoNavegador, enviarConversaoMeta } from '@/lib/meta-capi'
 import { urlDoWebhook } from '@/lib/site-url'
 import { criarPagamento, NovoPagamento, UnicopagErro } from '@/lib/unicopag'
+import { enviarEmailTransacional } from '@/lib/email'
 import { notificarSecretaria } from '@/lib/webhook-secretaria'
 
 /**
@@ -255,6 +256,13 @@ export function POST(request: Request) {
     }
 
     notificarSecretaria(inscricaoId, 'pagamento_iniciado')
+    // Só o PIX, e só com código: no cartão o desfecho é imediato, e uma
+    // cobrança sem copia-e-cola não daria ao aluno nada para pagar depois.
+    // É o e-mail que permite voltar e concluir horas mais tarde, que é
+    // exatamente onde as duas primeiras inscrições reais pararam.
+    if (data.metodo === 'pix' && data.pix_copia_cola) {
+      enviarEmailTransacional(inscricaoId, 'cobranca_aberta', data.id)
+    }
     enviarConversaoMeta(inscricaoId, 'pagamento', { pagamentoId: data.id, contexto: contextoDoNavegador(request) })
 
     return NextResponse.json({
