@@ -1,22 +1,34 @@
 'use client'
 
 import Image from 'next/image'
-import { CalendarRange, Clock3, MapPin } from 'lucide-react'
+import { Award, Clock3, MapPin } from 'lucide-react'
 import { CtaButton } from '@/components/cta-button'
-import { courseData, heroPhoto, priceLine, supportLine } from '@/lib/course-data'
+import { CtaReassurance } from '@/components/cta-reassurance'
+import { courseData, heroPhoto, INSTITUTION_NAME } from '@/lib/course-data'
 import { classFormationNote, heroCopy } from '@/lib/headlines'
 import type { Variant } from '@/lib/ab-test'
 
+/**
+ * Os três fatos que sustentam a decisão, logo abaixo do título.
+ *
+ * Antes eram detalhes de processo — "turmas organizadas semanalmente",
+ * "disponibilidade informada depois da matrícula". O segundo anunciava, no
+ * primeiro terço da página e antes de qualquer desejo, que se paga sem
+ * saber a data: a objeção mais dura da oferta, dita antes do argumento.
+ * Ela continua na página, dita por inteiro logo abaixo (`classFormationNote`)
+ * e em três respostas do FAQ — só deixou de ser a primeira coisa que a
+ * pessoa lê.
+ */
 const cards = [
   {
-    icon: CalendarRange,
-    label: 'Formação das turmas',
-    value: 'Organizadas semanalmente',
+    icon: Award,
+    label: 'Certificado',
+    value: INSTITUTION_NAME,
   },
   {
     icon: Clock3,
-    label: 'Disponibilidade',
-    value: 'Informada depois da matrícula',
+    label: 'Carga horária',
+    value: '8 horas em um único dia',
   },
   {
     icon: MapPin,
@@ -49,6 +61,18 @@ export function HeroSection({ variant }: { variant: Variant }) {
           {copy.institutionalLine ? (
             <p className="mt-4 text-pretty text-base font-semibold text-foreground sm:text-lg">
               {copy.institutionalLine}
+            </p>
+          ) : null}
+
+          {/*
+            Prova social só com número conferido pela secretaria — enquanto
+            `studentsEnrolled` for null, a página não afirma nada. Vale mais
+            uma página sem contagem do que uma contagem inventada no nome de
+            uma instituição de saúde.
+          */}
+          {courseData.studentsEnrolled ? (
+            <p className="mt-3 text-sm font-semibold text-primary">
+              +{courseData.studentsEnrolled} pessoas já se matricularam neste curso.
             </p>
           ) : null}
 
@@ -88,8 +112,7 @@ export function HeroSection({ variant }: { variant: Variant }) {
 
           <div className="mt-8">
             <CtaButton position="hero" className="w-full sm:w-auto" />
-            <p className="mt-3 text-sm font-semibold">{priceLine}</p>
-            <p className="mt-1 text-[13px] text-muted-foreground">{supportLine}</p>
+            <CtaReassurance />
           </div>
 
           <p className="mt-6 max-w-2xl border-l-2 border-primary/40 pl-4 text-[13px] leading-relaxed text-muted-foreground">

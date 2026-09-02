@@ -7,7 +7,13 @@ export function CourseFacts() {
     { icon: MapPin, label: 'Curso presencial' },
     { icon: Award, label: 'Certificado' },
     { icon: GraduationCap, label: `Pré-requisito: ${courseData.prerequisite}` },
-    { icon: Wallet, label: `Investimento total: ${formatBRL(courseData.totalPrice)}` },
+    // Os dois números juntos: o que se paga hoje, que é o da decisão, e o
+    // total, que é o da transparência. Só o total, logo abaixo de um botão
+    // de R$ 99, fazia a faixa desmentir o próprio CTA.
+    {
+      icon: Wallet,
+      label: `Matrícula ${formatBRL(courseData.registrationPrice)} · total ${formatBRL(courseData.totalPrice)}`,
+    },
   ]
 
   return (
