@@ -33,6 +33,15 @@ const ETAPA_DA_TELA: Record<string, EtapaDeCobranca> = { pagamento: 'matricula',
 type Cadastro = { primeiroNome: string; telefoneFinal: string; jaPaga: boolean }
 
 const EMPTY: EnrollmentData = { name: '', phone: '', cpf: '', email: '', highSchool: false }
+
+/**
+ * O cadastro, e não a cobrança, é que não passou. Distingue os dois lados
+ * da mesma promessa encadeada: um manda o aluno de volta ao formulário, o
+ * outro fica na tela de pagamento com "tentar de novo".
+ */
+class CadastroRecusado extends Error {
+  constructor(mensagem: string) { super(mensagem); this.name = 'CadastroRecusado' }
+}
 // 10s: cada consulta pode bater na API da Únicopag, então não convém
 // encurtar sem necessidade.
 const INTERVALO_POLLING = 10_000
@@ -59,9 +68,10 @@ export function EnrollmentFlow() {
   const [cartao, setCartao] = useState<DadosCartao>(CARTAO_VAZIO)
   const [agora, setAgora] = useState(0)
   const pointerStart = useRef<number | null>(null)
-  // Cobrança pedida no envio do cadastro, antes da tela de pagamento montar
-  // — a resposta da Únicopag corre em paralelo com a transição.
-  const cobrancaPrefetch = useRef<Promise<Cobranca> | null>(null)
+  // Cadastro + cobrança disparados no clique, antes da tela de pagamento
+  // montar — a resposta da Únicopag corre em paralelo com a transição.
+  // Resolve em `null` quando a inscrição já estava paga: não há o que cobrar.
+  const cobrancaPrefetch = useRef<Promise<Cobranca | null> | null>(null)
 
   useEffect(() => setData(loadJson(STORAGE_KEYS.enrollment, EMPTY)), [])
   useEffect(() => {
@@ -137,28 +147,34 @@ export function EnrollmentFlow() {
     )
     setErrors(nextErrors)
     if (Object.values(nextErrors).some(Boolean)) return
+    if (enviando) return
     setEnviando(true); setErroGeral('')
-    try {
-      // A variante e a campanha só existem no navegador (URL e cookie), e este
-      // é o último momento em que dá para lê-las: da etapa de pagamento em
-      // diante nada mais grava na inscrição.
-      const salva = await salvarInscricao(data, atribuicaoAtual())
+    // A tela de pagamento abre no clique, com o "gerando seu PIX" já na
+    // frente do aluno, e o cadastro e a cobrança correm encadeados por trás.
+    // Antes, o botão ficava em "Salvando…" até o cadastro responder, e só
+    // então a cobrança começava — uma ida ao servidor inteira, com o aluno
+    // olhando para um formulário parado, antes de a Únicopag ser chamada.
+    //
+    // A variante e a campanha só existem no navegador (URL e cookie), e este
+    // é o último momento em que dá para lê-las: da etapa de pagamento em
+    // diante nada mais grava na inscrição.
+    const atribuicao = atribuicaoAtual()
+    const prefetch = (async () => {
+      let salva: Awaited<ReturnType<typeof salvarInscricao>>
+      try { salva = await salvarInscricao(data, atribuicao) }
+      catch (e) { throw new CadastroRecusado(e instanceof ErroDaApi ? e.message : 'Não foi possível salvar. Tente novamente.') }
       // Etapa 3: nome, CPF e e-mail entregues. É o Lead do funil — daqui a
       // secretaria já consegue falar com a pessoa, tenha ela pago ou não.
       rastrear('dados', { id: salva.id, umaVezSo: true })
-      if (salva.jaPaga) { go('confirmado'); return }
-      // A cobrança começa aqui, não quando a tela de pagamento monta: a
-      // resposta da Únicopag é a espera dominante do checkout, e assim ela
-      // corre em paralelo com a transição. Sem risco de duplicar — o servidor
-      // reaproveita cobrança PIX aberta. O catch vazio só evita rejeição sem
-      // dono se a pessoa fechar antes; o erro de verdade é tratado por quem
-      // consome o prefetch.
-      cobrancaPrefetch.current = criarCobranca({ metodo: 'pix', etapa: 'matricula' })
-      cobrancaPrefetch.current.catch(() => undefined)
-      go('pagamento')
-    } catch (e) {
-      setErroGeral(e instanceof ErroDaApi ? e.message : 'Não foi possível salvar. Tente novamente.')
-    } finally { setEnviando(false) }
+      if (salva.jaPaga) return null
+      // Sem risco de duplicar — o servidor reaproveita cobrança PIX aberta.
+      return criarCobranca({ metodo: 'pix', etapa: 'matricula' })
+    })()
+    // O catch vazio só evita rejeição sem dono se a pessoa fechar antes; o
+    // erro de verdade é tratado por quem consome o prefetch.
+    prefetch.catch(() => undefined)
+    cobrancaPrefetch.current = prefetch
+    go('pagamento')
   }
 
   // Ao entrar na etapa de pagamento, recupera a cobrança aberta — ou cria uma.
@@ -167,16 +183,21 @@ export function EnrollmentFlow() {
     let cancelado = false
     ;(async () => {
       try {
-        // Veio do cadastro nesta mesma visita: a cobrança já está sendo
-        // criada desde o clique — só falta a resposta chegar. A consulta de
-        // cobrança existente fica para quem entra na etapa sem prefetch
-        // (recarregou a página ou voltou outro dia).
+        // Veio do cadastro nesta mesma visita: o cadastro e a cobrança já
+        // estão em andamento desde o clique — só falta a resposta chegar. A
+        // consulta de cobrança existente fica para quem entra na etapa sem
+        // prefetch (recarregou a página ou voltou outro dia).
         // O prefetch é sempre da matrícula: ele nasce no envio do cadastro.
         const prefetch = etapaDaCobranca === 'matricula' ? cobrancaPrefetch.current : null
         if (prefetch) {
+          // Consumido uma vez só: quem montar de novo cai na consulta.
           cobrancaPrefetch.current = null
-          const nova = await prefetch
+          let nova: Cobranca | null
+          try { nova = await prefetch }
+          finally { setEnviando(false) }
           if (cancelado) return
+          // Inscrição que já estava paga: não há o que cobrar.
+          if (!nova) { go('confirmado'); return }
           setCobranca(nova); setMetodo(nova.metodo)
           rastrear('pagamento', { dados: { metodo: nova.metodo }, id: nova.id, valorCentavos: nova.valorCentavos, umaVezSo: true })
           return
@@ -196,7 +217,11 @@ export function EnrollmentFlow() {
         // aqui, e não ao abrir a tela, porque sem cobrança não há o que pagar.
         rastrear('pagamento', { dados: { metodo: nova.metodo }, id: nova.id, valorCentavos: nova.valorCentavos, umaVezSo: true })
       } catch (e) {
-        if (!cancelado) setErroGeral(e instanceof ErroDaApi ? e.message : 'Não foi possível abrir a cobrança.')
+        if (cancelado) return
+        // O cadastro é que falhou (CPF inválido, banco fora): o lugar de
+        // corrigir é o formulário, não uma tela de pagamento sem cobrança.
+        if (e instanceof CadastroRecusado) { setErroGeral(e.message); go('dados'); return }
+        setErroGeral(e instanceof ErroDaApi ? e.message : 'Não foi possível abrir a cobrança.')
       }
     })()
     return () => { cancelado = true }
