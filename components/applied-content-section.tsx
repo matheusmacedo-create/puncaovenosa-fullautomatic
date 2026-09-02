@@ -85,7 +85,7 @@ export function AppliedContentSection() {
               className="mt-5 w-full sm:w-auto"
             />
 
-            <CtaReassurance compact />
+            <CtaReassurance />
             <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
               A data e o horário serão confirmados pela secretaria após a organização da turma.
             </p>

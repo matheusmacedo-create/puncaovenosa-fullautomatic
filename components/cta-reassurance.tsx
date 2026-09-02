@@ -1,57 +1,59 @@
 import { MessageCircle, ShieldCheck } from 'lucide-react'
-import { courseData, institutionContact, priceLine, supportLine } from '@/lib/course-data'
+import { courseData, institutionContact, priceLine } from '@/lib/course-data'
 
 /**
  * O que fica logo abaixo de cada CTA: preço, garantia e uma porta de saída
  * humana.
  *
- * A garantia de arrependimento existia só como link no rodapé, longe de
- * onde a decisão acontece. É o argumento mais forte que a página tem para
- * quem hesita — não é promessa de marketing, é a política publicada em
- * `/politica-de-reembolso` — e por isso passa a aparecer ao lado do botão,
- * em todos os pontos de decisão.
+ * A garantia existia só como link no rodapé, longe de onde a decisão
+ * acontece — não é promessa de marketing, é a política publicada em
+ * `/politica-de-reembolso`. O WhatsApp entra pelo mesmo motivo: parte do
+ * público não compra sem falar com uma pessoa antes.
  *
- * O WhatsApp entra pelo mesmo motivo: parte do público não compra sem falar
- * com uma pessoa antes, e sem um canal visível essa gente simplesmente
- * fecha a página.
+ * Tudo isso cabe em duas linhas de propósito. A primeira versão empilhava
+ * quatro blocos com ícone e frase inteira, e o resultado eram seis linhas de
+ * letra miúda coladas embaixo do botão em quatro pontos da página: lido de
+ * longe virava um rodapé de contrato, e um bloco de termos logo abaixo do
+ * botão trabalha contra ele. A doação de alimento saiu daqui (continua no
+ * quadro de oferta e no FAQ) porque é a informação menos urgente das três no
+ * momento de decidir.
  */
-export function CtaReassurance({ compact = false, showPrice = true }: {
-  compact?: boolean
+export function CtaReassurance({ showPrice = true, centralizado = false }: {
   /** Desligue onde o preço já está escrito logo acima, como no quadro de oferta. */
   showPrice?: boolean
+  /** Acompanha um CTA centralizado, como o do fim da página. */
+  centralizado?: boolean
 }) {
   return (
-    <div className={compact ? 'mt-3' : 'mt-3 sm:mt-4'}>
-      {showPrice ? <>
-        <p className="text-sm font-semibold">{priceLine}</p>
-        <p className="mt-1 text-[13px] text-muted-foreground">{supportLine}</p>
-      </> : <p className="text-[13px] text-muted-foreground">{supportLine}</p>}
+    <div className={`mt-3 ${centralizado ? 'text-center' : ''}`}>
+      {showPrice && <p className="text-sm font-semibold">{priceLine}</p>}
 
-      <p className="mt-3 flex items-start gap-2 text-[13px] leading-relaxed text-muted-foreground">
-        <ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
-        <span>
-          <strong className="font-semibold text-foreground">
-            {courseData.refundWindowDays} dias de garantia.
-          </strong>{' '}
-          Desistiu nesse prazo, devolvemos o valor integral —{' '}
+      <p className={`mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-[13px] leading-tight text-muted-foreground ${centralizado ? 'justify-center' : ''}`}>
+        <span>{courseData.paymentMethods}</span>
+
+        <span aria-hidden="true" className="text-border">•</span>
+
+        <span className="inline-flex items-center gap-1.5">
+          <ShieldCheck className="size-4 shrink-0 text-primary" aria-hidden="true" />
           {courseData.refundPolicyUrl ? (
             <a
               href={courseData.refundPolicyUrl}
-              className="font-semibold text-primary underline decoration-1 underline-offset-2"
+              className="font-semibold text-foreground underline decoration-1 underline-offset-2"
             >
-              veja a política
+              Garantia de {courseData.refundWindowDays} dias
             </a>
           ) : (
-            'conforme a política de reembolso'
+            <span className="font-semibold text-foreground">
+              Garantia de {courseData.refundWindowDays} dias
+            </span>
           )}
-          .
         </span>
-      </p>
 
-      <p className="mt-2 flex items-start gap-2 text-[13px] leading-relaxed text-muted-foreground">
-        <MessageCircle className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
-        <span>
-          Ficou com dúvida? Fale com a secretaria no WhatsApp{' '}
+        <span aria-hidden="true" className="text-border">•</span>
+
+        <span className="inline-flex items-center gap-1.5">
+          <MessageCircle className="size-4 shrink-0 text-primary" aria-hidden="true" />
+          Dúvidas no WhatsApp{' '}
           <a
             href={institutionContact.whatsappUrl}
             target="_blank"
@@ -60,7 +62,6 @@ export function CtaReassurance({ compact = false, showPrice = true }: {
           >
             {institutionContact.whatsappLabel}
           </a>
-          .
         </span>
       </p>
     </div>

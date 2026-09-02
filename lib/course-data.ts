@@ -154,4 +154,14 @@ export const priceLine = [
 
 export const supportLine = `${courseData.paymentMethods} • ${courseData.foodDonation}`
 
-export const CTA_LABEL = `FAZER MINHA MATRÍCULA POR ${formatBRL(courseData.registrationPrice)}`
+/**
+ * O rótulo dos CTAs.
+ *
+ * Sem o "MINHA" de propósito: com ele o texto pedia 288px e o botão dentro
+ * do quadro de oferta oferece 268 num celular de 390 — ele quebrava em duas
+ * linhas ali e ficava numa só nos outros três pontos, o que fazia o mesmo
+ * botão parecer dois. Ajustar padding e espaçamento deixava 4px de folga,
+ * frágil demais para uma palavra que não carrega informação: o que converte
+ * aqui é o verbo e o preço.
+ */
+export const CTA_LABEL = `FAZER MATRÍCULA POR ${formatBRL(courseData.registrationPrice)}`

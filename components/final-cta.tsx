@@ -24,9 +24,7 @@ export function FinalCTA() {
 
         <div className="mt-8">
           <CtaButton position="final" className="w-full sm:w-auto" />
-          <div className="mx-auto max-w-md text-left">
-            <CtaReassurance />
-          </div>
+          <CtaReassurance centralizado />
         </div>
       </div>
     </section>
