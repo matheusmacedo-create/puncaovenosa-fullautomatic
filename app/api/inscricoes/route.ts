@@ -9,7 +9,7 @@ import { notificarSecretaria } from '@/lib/webhook-secretaria'
 
 type Payload = {
   name?: string; phone?: string; cpf?: string; email?: string; highSchool?: boolean
-  variante?: string; utmSource?: string; utmMedium?: string; utmCampaign?: string
+  utmSource?: string; utmMedium?: string; utmCampaign?: string
 }
 
 /**
@@ -53,7 +53,9 @@ export function POST(request: Request) {
         p_telefone: digits(dados.phone),
         p_ensino_medio: dados.highSchool,
         p_email: dados.email,
-        p_variante: rotulo(body.variante),
+        // A coluna guarda o histórico das duas páginas de venda que já
+        // existiram; com uma página só, linha nova nasce sem variante.
+        p_variante: null,
         p_utm_source: rotulo(body.utmSource),
         p_utm_medium: rotulo(body.utmMedium),
         p_utm_campaign: rotulo(body.utmCampaign),

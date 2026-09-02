@@ -8,7 +8,6 @@ import {
   COBRA_CURSO_A_PARTE, formatarBRL, maskCpf, maskPhone, PRECO_CURSO_CENTAVOS, triageQuestions,
 } from '@/lib/enrollment'
 import { metaCapiConfigurado } from '@/lib/meta-capi'
-import { CHAVES, PAGINAS, caminhoDaPagina } from '@/lib/paginas-de-venda'
 import { audienciaConfigurada, JANELA_DE_ABANDONO_HORAS } from '@/lib/meta-audiencia'
 import { secretariaAutenticada, secretariaHabilitada } from '@/lib/secretaria'
 import { supabaseServer } from '@/lib/supabase/server'
@@ -94,7 +93,7 @@ type Inscricao = {
   criado_em: string
 }
 
-/** Uma linha de `funil_por_origem` — uma variante ou uma campanha. */
+/** Uma linha de `funil_por_origem` — uma origem ou uma campanha. */
 type LinhaDeOrigem = {
   chave: string
   visitas: number
@@ -105,11 +104,6 @@ type LinhaDeOrigem = {
 
 /** Percentual só quando o denominador existe: 0 de 0 não é 0%, é nada a dizer. */
 const pct = (parte: number, todo: number) => (todo > 0 ? `${Math.round((parte / todo) * 100)}%` : '—')
-
-// A chave gravada no banco é curta (`a`, `b`); quem lê o painel quer o nome.
-const ROTULOS_DAS_PAGINAS = Object.fromEntries(
-  CHAVES.map(chave => [chave, { nome: PAGINAS[chave].nome, caminho: caminhoDaPagina(chave) }]),
-)
 
 /** Minúsculas e sem acento, para a busca da tabela achar "Joao" digitando "joão". */
 const normalizar = (v: string) => v.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
@@ -239,13 +233,18 @@ export default async function SecretariaPage({
   // como o resto desta página, porque `visitas_landing` cresce a cada acesso
   // à landing — carregar tudo aqui para contar seria a primeira coisa a
   // derrubar o painel quando a campanha escalar.
-  const [{ data: porVariante, error: erroOrigem }, { data: porCampanha }] = await Promise.all([
-    supabase.rpc('funil_por_origem', { p_dimensao: 'variante' }),
+  //
+  // A quebra por `variante` saiu junto com a segunda página de venda: com
+  // uma página só, ela responderia sempre a mesma coisa. A origem
+  // (`utm_source`) entrou no lugar — separa quem veio do Instagram de quem
+  // veio do Facebook, que é a comparação que ainda distingue algo.
+  const [{ data: porOrigem, error: erroOrigem }, { data: porCampanha }] = await Promise.all([
+    supabase.rpc('funil_por_origem', { p_dimensao: 'utm_source' }),
     supabase.rpc('funil_por_origem', { p_dimensao: 'utm_campaign' }),
   ])
   // Cast à mão: os tipos gerados do Supabase não conhecem esta função, e
   // `.returns<T[]>()` esbarra na inferência do próprio cliente.
-  const linhasPorVariante = (porVariante ?? []) as LinhaDeOrigem[]
+  const linhasPorOrigem = (porOrigem ?? []) as LinhaDeOrigem[]
   const linhasPorCampanha = (porCampanha ?? []) as LinhaDeOrigem[]
 
   // Pontos do mapa: só quem tem coordenada gravada na resposta do passo 1 —
@@ -443,16 +442,15 @@ export default async function SecretariaPage({
 
     {!erroOrigem && (
       <section className="secretaria-bloco">
-        <h2>O que converte — por página e por campanha</h2>
+        <h2>O que converte — por origem e por campanha</h2>
         <p className="secretaria-bloco-legenda">
-          O mesmo funil de cima, quebrado por origem. É o que responde qual página vende e qual anúncio traz
-          gente que paga — e não só gente que clica. Cada página tem endereço próprio (a coluna mostra qual):
-          quem decide o que a pessoa vê é o link do anúncio, não um sorteio. A atribuição é de{' '}
+          O mesmo funil de cima, quebrado por origem. É o que responde qual anúncio traz gente que paga — e
+          não só gente que clica. A atribuição é de{' '}
           <strong>primeiro toque</strong> — quem voltou por um segundo anúncio e concluiu ali continua
           creditado a quem o trouxe da primeira vez. Quem entrou antes de 23/08/2026 aparece em{' '}
           <em>sem registro</em>: a inscrição só passou a guardar origem a partir dessa data.
         </p>
-        <FunilPorOrigem titulo="Página de venda" rotuloDaChave="Página" linhas={linhasPorVariante} rotulos={ROTULOS_DAS_PAGINAS} />
+        <FunilPorOrigem titulo="Origem (utm_source)" rotuloDaChave="Origem" linhas={linhasPorOrigem} />
         <FunilPorOrigem titulo="Campanha (utm_campaign)" rotuloDaChave="Campanha" linhas={linhasPorCampanha} />
       </section>
     )}
@@ -755,12 +753,11 @@ export default async function SecretariaPage({
  * segunda — atrair mais gente e vender menos — e só mostrando as duas dá para
  * enxergar isso.
  */
-function FunilPorOrigem({ titulo, rotuloDaChave, linhas, rotulos }: {
+function FunilPorOrigem({ titulo, rotuloDaChave, linhas }: {
   titulo: string
   rotuloDaChave: string
   linhas: LinhaDeOrigem[]
   /** Nome legível e endereço de cada chave, quando existirem (caso das páginas). */
-  rotulos?: Record<string, { nome: string; caminho: string }>
 }) {
   return <div className="secretaria-origem">
     <h3>{titulo}</h3>
@@ -784,8 +781,7 @@ function FunilPorOrigem({ titulo, rotuloDaChave, linhas, rotulos }: {
             {linhas.map(l => (
               <tr key={l.chave}>
                 <td>
-                  <strong>{rotulos?.[l.chave]?.nome ?? l.chave}</strong>
-                  {rotulos?.[l.chave] && <span className="secretaria-sub">{rotulos[l.chave].caminho}</span>}
+                  <strong>{l.chave}</strong>
                 </td>
                 <td>{l.visitas}</td>
                 <td>{l.inscricoes}</td>

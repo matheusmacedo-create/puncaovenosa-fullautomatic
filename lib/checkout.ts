@@ -1,4 +1,3 @@
-import { normalizeVariant, VARIANT_COOKIE, type Variant } from '@/lib/ab-test'
 import { registrarVisita } from '@/lib/api-cliente'
 import { rastrear } from '@/lib/rastreio'
 
@@ -16,31 +15,7 @@ const TRACKED_PARAMS = [
   'gclid',
 ]
 
-/**
- * Variante já atribuída a este visitante, ou `null` quando não há nenhuma.
- *
- * Separado de `currentVariant()` porque os dois usos querem coisas opostas na
- * ausência de variante: um evento precisa de um rótulo (daí o 'a' padrão), mas
- * a atribuição da inscrição precisa da verdade. Quem entra direto em
- * `/inscricao` pelo anúncio nunca viu a landing — gravar 'a' nesse caso somaria
- * uma conversão à variante A sem a visita correspondente, e a A pareceria
- * converter melhor só por causa de quem nunca a viu.
- */
-function varianteConhecida(): Variant | null {
-  if (typeof window === 'undefined') return null
-  const fromUrl = normalizeVariant(new URLSearchParams(window.location.search).get('variant'))
-  if (fromUrl) return fromUrl
-  const match = document.cookie.match(new RegExp(`(?:^|; )${VARIANT_COOKIE}=([^;]*)`))
-  return normalizeVariant(match?.[1] ?? null)
-}
-
-/** Variante ativa do visitante, usada em todos os eventos. */
-export function currentVariant(): Variant {
-  return varianteConhecida() ?? 'a'
-}
-
 export type Atribuicao = {
-  variante?: string
   utmSource?: string
   utmMedium?: string
   utmCampaign?: string
@@ -49,13 +24,17 @@ export type Atribuicao = {
 /**
  * De onde veio este visitante, no formato que `visitas_landing` e
  * `inscricoes` gravam. Fonte única das duas pontas: é o que permite cruzar
- * "quantos viram" com "quantos pagaram" pela mesma chave.
+ * "quantos viram" com "quantos pagaram" pela mesma campanha.
+ *
+ * Já houve aqui um campo `variante`, de quando havia duas páginas de venda.
+ * As colunas continuam no banco, com o histórico do que foi medido, mas não
+ * recebem valor novo: com uma página só, a campanha é a única origem que
+ * ainda distingue alguma coisa.
  */
-export function atribuicaoAtual(variante = varianteConhecida()): Atribuicao {
+export function atribuicaoAtual(): Atribuicao {
   if (typeof window === 'undefined') return {}
   const utms = currentUtms()
   return {
-    variante: variante ?? undefined,
     utmSource: utms.utm_source,
     utmMedium: utms.utm_medium,
     utmCampaign: utms.utm_campaign,
@@ -82,7 +61,7 @@ function push(detail: Record<string, unknown>) {
   window.dispatchEvent(new CustomEvent(String(detail.event), { detail }))
 }
 
-/** Preserva UTMs e a variante ao enviar o usuário para o checkout. */
+/** Preserva as UTMs ao enviar o usuário para o checkout. */
 export function buildCheckoutUrl(checkoutUrl: string, position: CtaPosition) {
   if (typeof window === 'undefined') return checkoutUrl
   if (!checkoutUrl || checkoutUrl === '#') return checkoutUrl
@@ -92,7 +71,6 @@ export function buildCheckoutUrl(checkoutUrl: string, position: CtaPosition) {
     for (const [key, value] of Object.entries(currentUtms())) {
       target.searchParams.set(key, value)
     }
-    target.searchParams.set('variant', currentVariant())
     target.searchParams.set('cta_position', position)
     // Pula a tela de demonstração do checkout e abre direto o painel lateral
     // de inscrição (etapa 1/9), onde o visitante já preenche os dados.
@@ -104,13 +82,13 @@ export function buildCheckoutUrl(checkoutUrl: string, position: CtaPosition) {
 }
 
 /** Etapa 1 do funil: a landing foi vista. */
-export function trackLandingView(variant: Variant) {
+export function trackLandingView() {
   if (typeof window === 'undefined') return
-  rastrear('landing', { dados: { variant, ...currentUtms() }, umaVezSo: true })
+  rastrear('landing', { dados: { ...currentUtms() }, umaVezSo: true })
   // Espelha no nosso banco: é o único jeito de "quantas visitas viraram
   // inscrição" aparecer em /secretaria — o pixel do Meta conta PageView do
   // lado dele, mas essa contagem não existe em lugar nenhum nosso sem isto.
-  registrarVisita(atribuicaoAtual(variant)).catch(() => undefined)
+  registrarVisita(atribuicaoAtual()).catch(() => undefined)
 }
 
 /**
@@ -122,7 +100,7 @@ export function trackLandingView(variant: Variant) {
  */
 export function trackCtaClick(position: CtaPosition) {
   if (typeof window === 'undefined') return
-  rastrear('cta', { dados: { cta_position: position, variant: currentVariant(), ...currentUtms() } })
+  rastrear('cta', { dados: { cta_position: position, ...currentUtms() } })
 }
 
 export type FooterContactTarget = 'whatsapp' | 'email' | 'instagram' | 'facebook' | 'maps'
@@ -130,5 +108,5 @@ export type FooterContactTarget = 'whatsapp' | 'email' | 'instagram' | 'facebook
 /** Contato no rodapé: não é etapa do funil, é saída para outro canal. */
 export function trackFooterContactClick(destination: FooterContactTarget) {
   if (typeof window === 'undefined') return
-  push({ event: 'footer_contact_click', destination, variant: currentVariant() })
+  push({ event: 'footer_contact_click', destination })
 }

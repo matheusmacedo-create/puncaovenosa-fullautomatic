@@ -18,30 +18,27 @@ import { DevelopmentChecklist } from '@/components/development-checklist'
 import { EngagementTracking } from '@/components/engagement-tracking'
 import { StructuredData } from '@/components/structured-data'
 import { TestPriceNotice } from '@/components/test-price-notice'
-import { VariantAssignment } from '@/components/variant-assignment'
-import type { Variant } from '@/lib/ab-test'
+import { RegistroDeVisita } from '@/components/registro-de-visita'
 
 /**
- * A landing inteira, com a copy do topo escolhida por `variante`.
+ * A landing inteira.
  *
- * Vive aqui, e não em `app/page.tsx`, porque duas rotas a servem: `/` (a
- * página padrão) e `/lp/[slug]` (uma por página do registro). Duplicar a
- * lista de seções entre as duas garantiria que um dia elas divergissem — e
- * a paridade entre as páginas é o que torna a comparação honesta: só o topo
- * pode mudar.
+ * Continua num componente próprio, e não dentro de `app/page.tsx`, para que
+ * a página do App Router siga sendo só o ponto de entrada — metadata e
+ * roteamento de um lado, conteúdo do outro.
  *
  * Ordem das seções conforme o documento mestre.
  */
-export function LandingPage({ variante }: { variante: Variant }) {
+export function LandingPage() {
   return (
     <>
       <StructuredData />
-      <VariantAssignment variante={variante} />
+      <RegistroDeVisita />
       <EngagementTracking />
       <TestPriceNotice />
       <InstitutionalHeader />
       <main className="pb-20 md:pb-0">
-        <HeroSection variant={variante} />
+        <HeroSection />
         <CourseFacts />
         <ValueProposition />
         <PainSection />

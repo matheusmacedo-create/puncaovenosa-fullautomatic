@@ -8,7 +8,7 @@ Página de vendas e checkout são **um app só**, e não dois projetos. Não é 
 
 | Etapa | Rota | O que acontece |
 | --- | --- | --- |
-| 0. Venda | `/` | Landing: oferta, conteúdo, FAQ, prova institucional. Os CTAs abrem o checkout numa gaveta sobre a página, preservando UTMs e a variante do teste A/B |
+| 0. Venda | `/` | Landing: oferta, conteúdo, FAQ, prova institucional. Os CTAs abrem o checkout numa gaveta sobre a página, preservando as UTMs |
 | 1. Captura | `/inscricao?etapa=dados` | Dados (nome, WhatsApp, e-mail, CPF, pré-requisito de ensino médio) e composição do preço |
 | 2. Pagamento | `/inscricao?etapa=pagamento` | Escolha entre PIX (copia-e-cola) e cartão (com parcelamento). Estados `pendente / confirmado / expirado / recusado` |
 | 3. Confirmação | `/inscricao?etapa=confirmado` | Vaga garantida — convite para a triagem |
@@ -32,24 +32,33 @@ Cada cobrança grava sua própria composição na coluna `pagamentos.itens`, e u
 
 Cobrar apenas a matrícula é aceito pelo modelo, mas **não está implementado no funil** — fica disponível para um downsell futuro.
 
-## Páginas de venda e atribuição
+## Atribuição de origem
 
-Cada página de venda tem **endereço próprio**, para colar no anúncio: `/` serve a padrão e `/lp/[slug]` serve as demais. O registro é `lib/paginas-de-venda.ts` — uma entrada por página, com a chave curta que vai para o banco (`a`, `b`), o slug da URL e o nome legível. Acrescentar uma página é uma entrada ali e a copy em `lib/headlines.ts`: a rota, o tipo `Variant` e a quebra do funil em `/secretaria` seguem sozinhas.
+Há **uma página de venda**, em `/`. Existiram duas, escolhidas por `?variant=` e servidas também em `/lp/[slug]`, com registro próprio, cookie de variante e quebra por variante no painel. Elas nunca chegaram a ser comparadas — o anúncio apontou sempre para a mesma e a segunda ficou sem tráfego —, então o aparato inteiro saiu. A copy do topo mora em `lib/headlines.ts`, num objeto só. Antes de reintroduzir teste A/B, garanta que existe orçamento para mandar tráfego às duas ao mesmo tempo: sem isso é só código a mais para manter a cada mudança de copy.
 
-Quem decide qual página a pessoa vê é o link do anúncio, não um sorteio. Havia um sorteio 50/50 no cliente e ele **invalidava a própria medição**: o servidor sempre renderizava a `a` e, caindo `b`, o navegador dava um `location.replace` e recarregava tudo. A `b` pagava um carregamento inteiro a mais antes de aparecer, e como a visita só era contada depois do recarregamento, quem desistia no meio não entrava em nenhuma das duas contas — a `b` perdia gente de verdade e ao mesmo tempo parecia converter melhor, porque o denominador dela encolhia. `/?variant=b` continua funcionando para não quebrar anúncio já publicado.
+Medir exigia as duas pontas. `visitas_landing` gravava quem via a página, mas `inscricoes` não guardava origem — dava para contar visitas por campanha e era impossível saber qual delas converteu.
 
-As páginas em `/lp/*` são `noindex` (com canônica para `/`): são quase idênticas entre si e à principal, e deixá-las indexáveis faria o Google escolher qual mostrar, competindo com `/` em vez de somar. Como destino de anúncio, ser indexável não faz falta.
+A migration `0013` fecha isso: `inscricoes` também guarda `utm_source`, `utm_medium` e `utm_campaign`, e `funil_por_origem(p_dimensao)` cruza as duas tabelas para devolver visita → inscrição → paga → matriculada por origem ou por campanha. É o bloco "O que converte" em `/secretaria`, com as duas taxas que importam: **% entrou** (de quem viu, quantos começaram a se inscrever) e **% pagou** (ponta a ponta — o número de dinheiro). Uma campanha pode ganhar na primeira e perder na segunda, e só as duas juntas mostram isso.
 
-Medir exigia as duas pontas. `visitas_landing` gravava a página vista, mas `inscricoes` não — dava para contar "a B teve 19 visitas" e era impossível saber se ela converteu melhor.
+A coluna `variante` continua nas duas tabelas, com o histórico do que foi medido enquanto havia duas páginas, mas não recebe valor novo: `p_variante` vai como `null` (a RPC exige o argumento porque não tem default).
 
-A migration `0013` fecha isso: `inscricoes` também guarda `variante`, `utm_source`, `utm_medium` e `utm_campaign`, e `funil_por_origem(p_dimensao)` cruza as duas tabelas para devolver visita → inscrição → paga → matriculada por variante ou por UTM. É o bloco "O que converte" em `/secretaria`, com as duas taxas que importam: **% entrou** (de quem viu, quantos começaram a se inscrever — isola a página) e **% pagou** (ponta a ponta — o número de dinheiro). Uma variante pode ganhar na primeira e perder na segunda, e só as duas juntas mostram isso.
+A atribuição é de **primeiro toque**: quem voltou por um segundo anúncio e concluiu ali continua creditado a quem o trouxe da primeira vez. Sem isso, o remarketing apareceria como o melhor anúncio da conta — ele só reencontra gente que outro anúncio já pagou para atrair. No SQL é o `coalesce` do `upsert_inscricao`, o inverso do que o e-mail faz.
 
-A atribuição é de **primeiro toque**: quem voltou por um segundo anúncio e concluiu ali continua creditado a quem o trouxe da primeira vez. Sem isso, o remarketing apareceria como o melhor anúncio da conta — ele só reencontra gente que outro anúncio já pagou para atrair. No SQL é o `coalesce(i.variante, excluded.variante)` do `upsert_inscricao`, o inverso do que o e-mail faz.
+Uma armadilha que já custou dado, resolvida e fácil de reintroduzir:
 
-Duas armadilhas que já custaram dado, ambas resolvidas e fáceis de reintroduzir:
+- **Trocar de etapa reescrevendo a URL.** `go()` (`components/enrollment-flow.tsx`) fazia `?etapa=X` puro e apagava as UTMs, então a venda chegava sem origem. Preserve a query e troque só `etapa`.
 
-- **Ler a variante com `currentVariant()` para atribuir.** Ela devolve `'a'` quando não há variante nenhuma, o que é certo para rotular um evento e errado para creditar uma venda: quem entra direto em `/inscricao` pelo anúncio nunca viu a landing, e viraria uma conversão da A sem a visita correspondente — a A pareceria converter melhor por causa de quem nunca a viu. Para atribuir, use `varianteConhecida()`, que devolve `null`.
-- **Trocar de etapa reescrevendo a URL.** `go()` (`components/enrollment-flow.tsx`) fazia `?etapa=X` puro e apagava as UTMs. A variante sobrevivia por estar em cookie; a campanha só existe na URL, então a venda chegava sem origem. Preserve a query e troque só `etapa`.
+## Imagens
+
+As fotos são servidas por `components/foto.tsx`, um `<picture>` escrito à mão, e não por `next/image`: `next.config.mjs` traz `images.unoptimized`, então ali o Next não redimensiona nem converte nada e o arquivo de `public/` vai cru para o aparelho do aluno. O `<picture>` entrega AVIF a quem entende, webp a quem não, e a versão de 640px no celular — o hero sai de 66 KB para 23 KB.
+
+As versões saem de um script, que fixa os sufixos esperados pelo componente:
+
+```bash
+node scripts/otimizar-fotos.mjs caminho/para/foto.jpg
+```
+
+Foto nova entra rodando o script e apontando `CoursePhoto.base` (em `lib/course-data.ts`) para o caminho sem sufixo nem extensão — nunca copiando o arquivo original para `public/`.
 
 ## Páginas legais
 

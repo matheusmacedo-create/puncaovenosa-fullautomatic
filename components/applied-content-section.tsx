@@ -1,6 +1,6 @@
-import Image from 'next/image'
 import { AlertTriangle, ListChecks, Package } from 'lucide-react'
 import { CtaButton } from '@/components/cta-button'
+import { Foto } from '@/components/foto'
 import { CtaReassurance } from '@/components/cta-reassurance'
 import { contentPhoto, courseData, formatBRL } from '@/lib/course-data'
 
@@ -28,16 +28,7 @@ export function AppliedContentSection() {
       <div className="mx-auto flex w-full max-w-[1120px] flex-col gap-10 md:flex-row md:items-center md:gap-14">
         <figure className="md:w-[44%] md:shrink-0">
           <div className="relative aspect-[4/3] w-full overflow-hidden rounded-md bg-background md:aspect-[4/5]">
-            {contentPhoto.src ? (
-              <Image
-                src={contentPhoto.src}
-                alt={contentPhoto.alt}
-                fill
-                loading="lazy"
-                sizes="(max-width: 768px) 100vw, 480px"
-                className="object-cover"
-              />
-            ) : null}
+            <Foto foto={contentPhoto} sizes="(max-width: 768px) 100vw, 480px" className="object-cover" />
           </div>
           <figcaption className="mt-2 text-xs text-muted-foreground">
             {contentPhoto.caption}

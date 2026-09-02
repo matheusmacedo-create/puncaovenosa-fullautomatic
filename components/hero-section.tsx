@@ -1,12 +1,11 @@
 'use client'
 
-import Image from 'next/image'
 import { Award, Clock3, MapPin } from 'lucide-react'
 import { CtaButton } from '@/components/cta-button'
+import { Foto } from '@/components/foto'
 import { CtaReassurance } from '@/components/cta-reassurance'
 import { courseData, heroPhoto, INSTITUTION_NAME } from '@/lib/course-data'
 import { classFormationNote, heroCopy } from '@/lib/headlines'
-import type { Variant } from '@/lib/ab-test'
 
 /**
  * Os três fatos que sustentam a decisão, logo abaixo do título.
@@ -37,8 +36,8 @@ const cards = [
   },
 ]
 
-export function HeroSection({ variant }: { variant: Variant }) {
-  const copy = heroCopy[variant]
+export function HeroSection() {
+  const copy = heroCopy
 
   return (
     <section
@@ -83,16 +82,7 @@ export function HeroSection({ variant }: { variant: Variant }) {
 
         <figure className="mt-8 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:mt-0 lg:self-center">
           <div className="relative aspect-[4/3] w-full overflow-hidden rounded-md bg-muted sm:aspect-[16/10] lg:aspect-[4/5]">
-            {heroPhoto.src ? (
-              <Image
-                src={heroPhoto.src}
-                alt={heroPhoto.alt}
-                fill
-                priority
-                sizes="(max-width: 1024px) 100vw, 440px"
-                className="object-cover"
-              />
-            ) : null}
+            <Foto foto={heroPhoto} prioridade sizes="(max-width: 1024px) 100vw, 440px" className="object-cover" />
           </div>
           <figcaption className="mt-2 text-xs text-muted-foreground">{heroPhoto.caption}</figcaption>
         </figure>

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { corpo, rota } from '@/lib/http'
 import { supabaseServer } from '@/lib/supabase/server'
 
-type Payload = { variante?: string; utmSource?: string; utmMedium?: string; utmCampaign?: string }
+type Payload = { utmSource?: string; utmMedium?: string; utmCampaign?: string }
 
 /**
  * Registra uma visita real à landing — o topo do funil que não tem
@@ -18,8 +18,9 @@ export function POST(request: Request) {
     const body = await corpo<Payload>(request)
     if (!body) return NextResponse.json({ ok: true })
 
+    // `variante` fica de fora: a coluna guarda o histórico das duas páginas
+    // de venda que existiram, e linhas novas nascem sem ela.
     const { error } = await supabaseServer().from('visitas_landing').insert({
-      variante: body.variante ?? null,
       utm_source: body.utmSource ?? null,
       utm_medium: body.utmMedium ?? null,
       utm_campaign: body.utmCampaign ?? null,
