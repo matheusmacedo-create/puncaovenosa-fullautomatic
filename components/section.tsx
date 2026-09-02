@@ -18,7 +18,13 @@ export function Section({
       id={id}
       aria-labelledby={ariaLabelledby}
       className={cn(
-        'px-5 py-16 sm:px-8 md:py-24',
+        // 64px em cima e embaixo davam 128px de vazio entre cada seção — num
+        // aparelho de 844px de altura, quinze por cento de uma tela, doze
+        // vezes na página: 1507px só de respiro, 12% do comprimento total.
+        // As faixas alternam fundo branco e cinza, então elas já se separam
+        // sozinhas; o respiro grande volta a partir de `sm`, onde há tela
+        // sobrando para ele.
+        'px-5 py-10 sm:px-8 sm:py-14 md:py-24',
         tone === 'muted' && 'bg-muted',
         tone === 'dark' && 'bg-foreground text-background',
         className,

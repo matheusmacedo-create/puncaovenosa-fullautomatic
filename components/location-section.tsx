@@ -13,7 +13,7 @@ export function LocationSection() {
         O curso acontece na sede da {INSTITUTION_NAME}
       </SectionTitle>
 
-      <div className="mt-8 grid gap-4 md:grid-cols-2">
+      <div className="mt-6 sm:mt-8 grid gap-4 md:grid-cols-2">
         <div className="rounded-md border border-border bg-background p-6">
           <MapPin className="size-5 text-primary" aria-hidden="true" />
           <h3 className="mt-3 text-base font-bold">Endereço</h3>

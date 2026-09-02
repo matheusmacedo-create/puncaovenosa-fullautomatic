@@ -18,7 +18,7 @@ export function OfferCard() {
         O que está incluído
       </SectionTitle>
 
-      <div className="mt-8 grid gap-px overflow-hidden rounded-md border border-border bg-border md:grid-cols-[1.15fr_1fr]">
+      <div className="mt-6 sm:mt-8 grid gap-px overflow-hidden rounded-md border border-border bg-border md:grid-cols-[1.15fr_1fr]">
         <div className="bg-background p-5 sm:p-8">
           <ul className="grid gap-3">
             {includedItems.map((item) => (
@@ -29,7 +29,7 @@ export function OfferCard() {
             ))}
           </ul>
 
-          <div className="mt-7 flex items-start gap-3 rounded-md bg-muted p-4">
+          <div className="mt-6 sm:mt-7 flex items-start gap-3 rounded-md bg-muted p-4">
             <HeartHandshake className="mt-0.5 size-5 shrink-0 text-primary" aria-hidden="true" />
             <p className="text-sm leading-relaxed text-pretty">
               Também solicitamos {courseData.foodDonation}, entregue no dia do curso e destinado às

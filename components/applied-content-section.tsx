@@ -24,7 +24,7 @@ const highlights = [
 
 export function AppliedContentSection() {
   return (
-    <section aria-labelledby="content-title" className="bg-muted px-5 py-16 sm:px-8 md:py-24">
+    <section aria-labelledby="content-title" className="bg-muted px-5 py-10 sm:px-8 sm:py-14 md:py-24">
       <div className="mx-auto flex w-full max-w-[1120px] flex-col gap-10 md:flex-row md:items-center md:gap-14">
         <figure className="md:w-[44%] md:shrink-0">
           <div className="relative aspect-[4/3] w-full overflow-hidden rounded-md bg-background md:aspect-[4/5]">
@@ -83,12 +83,21 @@ export function AppliedContentSection() {
             que a secretaria confirma a data, coisa que o parágrafo já diz.
           */}
           <div className="mt-10 rounded-md border border-border bg-background p-6">
-            <h3 className="text-balance text-lg font-bold sm:text-xl">
-              Dê o primeiro passo para participar de uma turma
-            </h3>
+            {/*
+              Título curto: "Dê o primeiro passo para participar de uma turma"
+              ocupava duas linhas no celular para dizer o que o botão logo
+              abaixo já diz melhor.
+
+              E a frase falava de processo — o que acontece depois do
+              pagamento — num ponto da página em que a pessoa acabou de ler o
+              que vai aprender e precisa de um motivo para clicar, não de
+              logística. A logística está no hero, na seção de formação de
+              turmas e em três respostas do FAQ; aqui basta a garantia da
+              vaga, que é o que a matrícula compra.
+            */}
+            <h3 className="text-lg font-bold sm:text-xl">Comece pela matrícula</h3>
             <p className="mt-2 max-w-[55ch] text-sm leading-relaxed text-muted-foreground">
-              Depois do pagamento você informa os dias e horários que funcionam melhor, e a
-              secretaria monta a turma a partir disso.
+              Ela garante sua vaga hoje. Os dias e horários você combina com a secretaria depois.
             </p>
 
             {/* Sem rótulo próprio: o mesmo gesto tem o mesmo nome nos quatro CTAs. */}

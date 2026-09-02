@@ -14,7 +14,7 @@ export function AudienceSection() {
         Para quem quer compreender melhor a rotina da punção venosa
       </SectionTitle>
 
-      <ul className="mt-8 grid gap-3 md:grid-cols-3">
+      <ul className="mt-6 sm:mt-8 grid gap-3 md:grid-cols-3">
         {items.map((item) => (
           <li
             key={item}
