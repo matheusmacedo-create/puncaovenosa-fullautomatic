@@ -36,8 +36,8 @@ const EMPTY: EnrollmentData = { name: '', phone: '', cpf: '', email: '', highSch
 
 /**
  * O cadastro, e não a cobrança, é que não passou. Distingue os dois lados
- * da mesma promessa encadeada: um manda o aluno de volta ao formulário, o
- * outro fica na tela de pagamento com "tentar de novo".
+ * da mesma cadeia: um manda o aluno de volta ao formulário, o outro fica
+ * na tela de pagamento com "tentar de novo".
  */
 class CadastroRecusado extends Error {
   constructor(mensagem: string) { super(mensagem); this.name = 'CadastroRecusado' }
@@ -68,10 +68,15 @@ export function EnrollmentFlow() {
   const [cartao, setCartao] = useState<DadosCartao>(CARTAO_VAZIO)
   const [agora, setAgora] = useState(0)
   const pointerStart = useRef<number | null>(null)
-  // Cadastro + cobrança disparados no clique, antes da tela de pagamento
-  // montar — a resposta da Únicopag corre em paralelo com a transição.
-  // Resolve em `null` quando a inscrição já estava paga: não há o que cobrar.
-  const cobrancaPrefetch = useRef<Promise<Cobranca | null> | null>(null)
+  // Cadastro + cobrança, encadeados, com a chave dos dados que os geraram.
+  // Nascem assim que o formulário fica válido — antes do toque no botão —,
+  // e a tela de pagamento só espera o que ainda falta chegar. Resolve em
+  // `null` quando a inscrição já estava paga: não há o que cobrar.
+  const cadeia = useRef<{ chave: string; promessa: Promise<Cobranca | null>; falhou: boolean } | null>(null)
+  // Última falha do pré-aquecimento: segura a próxima tentativa automática
+  // para um banco fora do ar não virar uma requisição a cada tecla. O
+  // clique nunca espera — ele sempre tenta.
+  const ultimaFalha = useRef(0)
 
   useEffect(() => setData(loadJson(STORAGE_KEYS.enrollment, EMPTY)), [])
   useEffect(() => {
@@ -124,14 +129,80 @@ export function EnrollmentFlow() {
     router.push('/')
   }
 
+  /**
+   * Cadastro e cobrança para um conjunto de dados, uma vez só.
+   *
+   * A mesma cadeia serve ao pré-aquecimento e ao clique: quem chega depois
+   * com os mesmos dados recebe a promessa em curso, em vez de disparar de
+   * novo. Dados diferentes (a pessoa corrigiu o nome) abrem outra cadeia,
+   * mas **atrás** da anterior, nunca ao lado dela — duas criações
+   * simultâneas passariam ambas pela checagem de cobrança aberta do
+   * servidor e virariam dois PIX na Únicopag. Uma cadeia que falhou fica
+   * marcada, não apagada: a tela de pagamento ainda precisa ler a falha
+   * para devolver a pessoa ao formulário — apagar na hora deixava a tela
+   * sem saber por que não havia cobrança. Quem pede de novo depois da
+   * falha começa do zero.
+   */
+  const encadear = (dados: EnrollmentData): Promise<Cobranca | null> => {
+    const chave = JSON.stringify(dados)
+    const atual = cadeia.current
+    if (atual && !atual.falhou && atual.chave === chave) return atual.promessa
+    // A variante e a campanha só existem no navegador (URL e cookie), e este
+    // é o último momento em que dá para lê-las: da etapa de pagamento em
+    // diante nada mais grava na inscrição.
+    const atribuicao = atribuicaoAtual()
+    const anterior = cadeia.current?.promessa ?? Promise.resolve(null)
+    const promessa = anterior.catch(() => null).then(async () => {
+      let salva: Awaited<ReturnType<typeof salvarInscricao>>
+      try { salva = await salvarInscricao(dados, atribuicao) }
+      catch (e) { throw new CadastroRecusado(e instanceof ErroDaApi ? e.message : 'Não foi possível salvar. Tente novamente.') }
+      // Etapa 3: nome, CPF e e-mail entregues. É o Lead do funil — daqui a
+      // secretaria já consegue falar com a pessoa, tenha ela pago ou não.
+      rastrear('dados', { id: salva.id, umaVezSo: true })
+      if (salva.jaPaga) return null
+      // Sem risco de duplicar — o servidor reaproveita cobrança PIX aberta.
+      return criarCobranca({ metodo: 'pix', etapa: 'matricula' })
+    })
+    // Também evita rejeição sem dono se a pessoa fechar antes; o erro de
+    // verdade é tratado por quem consome a cadeia.
+    promessa.catch(() => {
+      ultimaFalha.current = Date.now()
+      if (cadeia.current?.promessa === promessa) cadeia.current.falhou = true
+    })
+    cadeia.current = { chave, promessa, falhou: false }
+    return promessa
+  }
+
+  /**
+   * Começa o cadastro e a cobrança antes do toque no botão.
+   *
+   * A Únicopag leva de 9 a 22 s para criar um PIX, e o aluno costuma ficar
+   * mais que isso entre o último campo e o botão — lendo o quadro de preço,
+   * o aviso legal. Esse tempo, que era perdido, passa a ser a espera da
+   * cobrança: no clique, o código quase sempre já está pronto.
+   *
+   * Só com os cinco campos válidos, e nunca com um campo de texto ainda
+   * focado — "voce@gmail.co" é válido no meio da digitação e mandaria a
+   * cobrança (e o e-mail dela) para um endereço que não é o da pessoa. O
+   * CPF é a exceção: com 11 dígitos válidos não há o que continuar digitando.
+   */
+  const preAquecer = (dados: EnrollmentData, digitando?: keyof EnrollmentData) => {
+    if (digitando && digitando !== 'cpf' && digitando !== 'highSchool') return
+    if (Date.now() - ultimaFalha.current < 10_000) return
+    if ((Object.keys(dados) as (keyof EnrollmentData)[]).some(k => fieldError(k, dados))) return
+    encadear(dados)
+  }
+
   const update = <K extends keyof EnrollmentData>(key: K, value: EnrollmentData[K]) => {
     const next = { ...data, [key]: value }
     setData(next); saveJson(STORAGE_KEYS.enrollment, next)
+    preAquecer(next, key)
   }
 
   const blur = async (key: keyof EnrollmentData) => {
     const message = fieldError(key, data)
     setErrors(e => ({ ...e, [key]: message }))
+    preAquecer(data)
     if (key !== 'cpf' || message) return
     try {
       const achado = await consultarCpf(digits(data.cpf))
@@ -150,30 +221,11 @@ export function EnrollmentFlow() {
     if (enviando) return
     setEnviando(true); setErroGeral('')
     // A tela de pagamento abre no clique, com o "gerando seu PIX" já na
-    // frente do aluno, e o cadastro e a cobrança correm encadeados por trás.
-    // Antes, o botão ficava em "Salvando…" até o cadastro responder, e só
-    // então a cobrança começava — uma ida ao servidor inteira, com o aluno
-    // olhando para um formulário parado, antes de a Únicopag ser chamada.
-    //
-    // A variante e a campanha só existem no navegador (URL e cookie), e este
-    // é o último momento em que dá para lê-las: da etapa de pagamento em
-    // diante nada mais grava na inscrição.
-    const atribuicao = atribuicaoAtual()
-    const prefetch = (async () => {
-      let salva: Awaited<ReturnType<typeof salvarInscricao>>
-      try { salva = await salvarInscricao(data, atribuicao) }
-      catch (e) { throw new CadastroRecusado(e instanceof ErroDaApi ? e.message : 'Não foi possível salvar. Tente novamente.') }
-      // Etapa 3: nome, CPF e e-mail entregues. É o Lead do funil — daqui a
-      // secretaria já consegue falar com a pessoa, tenha ela pago ou não.
-      rastrear('dados', { id: salva.id, umaVezSo: true })
-      if (salva.jaPaga) return null
-      // Sem risco de duplicar — o servidor reaproveita cobrança PIX aberta.
-      return criarCobranca({ metodo: 'pix', etapa: 'matricula' })
-    })()
-    // O catch vazio só evita rejeição sem dono se a pessoa fechar antes; o
-    // erro de verdade é tratado por quem consome o prefetch.
-    prefetch.catch(() => undefined)
-    cobrancaPrefetch.current = prefetch
+    // frente do aluno. Se o pré-aquecimento já correu com estes mesmos
+    // dados, `encadear` devolve a cadeia em curso (ou pronta) — o clique
+    // não dispara nada de novo. Antes, o botão ficava em "Salvando…" até o
+    // cadastro responder, e só então a cobrança começava.
+    encadear(data)
     go('pagamento')
   }
 
@@ -184,17 +236,20 @@ export function EnrollmentFlow() {
     ;(async () => {
       try {
         // Veio do cadastro nesta mesma visita: o cadastro e a cobrança já
-        // estão em andamento desde o clique — só falta a resposta chegar. A
-        // consulta de cobrança existente fica para quem entra na etapa sem
-        // prefetch (recarregou a página ou voltou outro dia).
-        // O prefetch é sempre da matrícula: ele nasce no envio do cadastro.
-        const prefetch = etapaDaCobranca === 'matricula' ? cobrancaPrefetch.current : null
-        if (prefetch) {
-          // Consumido uma vez só: quem montar de novo cai na consulta.
-          cobrancaPrefetch.current = null
+        // estão em andamento desde o formulário — só falta a resposta chegar,
+        // se é que ainda falta. A consulta de cobrança existente fica para
+        // quem entra na etapa sem cadeia (recarregou a página ou voltou
+        // outro dia). A cadeia é sempre da matrícula: nasce no cadastro.
+        const emCurso = etapaDaCobranca === 'matricula' ? cadeia.current?.promessa : null
+        if (emCurso) {
           let nova: Cobranca | null
-          try { nova = await prefetch }
-          finally { setEnviando(false) }
+          try { nova = await emCurso }
+          catch (e) {
+            // A falha foi lida: quem montar a tela de novo cai na consulta
+            // normal, em vez de tropeçar na mesma rejeição para sempre.
+            if (cadeia.current?.promessa === emCurso) cadeia.current = null
+            throw e
+          } finally { setEnviando(false) }
           if (cancelado) return
           // Inscrição que já estava paga: não há o que cobrar.
           if (!nova) { go('confirmado'); return }
