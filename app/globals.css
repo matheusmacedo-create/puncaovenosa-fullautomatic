@@ -159,6 +159,9 @@ h1,h2,h3,h4 { font-family: var(--font-archivo), sans-serif; letter-spacing: -.01
 .legal-note a { color: var(--cvb-red); text-decoration: underline; }
 
 .payment-value { font: 700 38px var(--font-mono); margin-bottom: 2px; }
+/* Diz, embaixo do número grande, o que aquele número é — sem isso "R$ 99,00"
+   sozinho parece o preço do curso inteiro. */
+.payment-lede { color: var(--ink-soft); font-size: 13px; line-height: 1.45; margin-bottom: 10px; max-width: 40ch; }
 .receiver { color: var(--ink-soft); font-size: 13px; margin-bottom: 24px; }
 .copy-button { width: 100%; background: var(--ink); color: var(--card); }
 .copy-button.copied { background: var(--ok); }
@@ -276,6 +279,10 @@ h1,h2,h3,h4 { font-family: var(--font-archivo), sans-serif; letter-spacing: -.01
 .secure-note svg { width: 14px; height: 14px; flex: 0 0 auto; }
 
 .status-block.pendente { border-left-color: var(--cvb-red); }
+/* Saldo em aberto: alerta, não erro — a vaga da pessoa está garantida. */
+.status-block.saldo { border-left-color: var(--warn); }
+.status-block.saldo .primary-button { margin-top: 12px; text-align: center; text-decoration: none; }
+.confirmation-saldo { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--rule); color: var(--ink-soft); font-size: 13px; max-width: 340px; }
 
 .spin { width: 18px; height: 18px; animation: girar 1s linear infinite; }
 @keyframes girar { to { transform: rotate(360deg); } }
@@ -289,6 +296,10 @@ h1,h2,h3,h4 { font-family: var(--font-archivo), sans-serif; letter-spacing: -.01
 .price-line dd { margin: 0; font: 650 15px var(--font-mono); white-space: nowrap; }
 .price-line.total dt { font-weight: 800; }
 .price-line.total dd { font-weight: 800; }
+/* O saldo do curso é informação, não cobrança: fica visível, mas apagado o
+   bastante para não competir com o valor que sai do bolso agora. */
+.price-line.depois dt, .price-line.depois dd { color: var(--ink-soft); font-weight: 500; }
+.price-total-curso { margin: 10px 0 0; padding-top: 10px; border-top: 1px solid var(--rule); color: var(--ink-soft); font-size: 12px; }
 
 .simulation-banner { border: 1px dashed var(--cvb-red); color: var(--cvb-red); padding: 10px 12px; margin-bottom: 16px; font-size: 12px; font-weight: 650; }
 
@@ -314,6 +325,7 @@ h1,h2,h3,h4 { font-family: var(--font-archivo), sans-serif; letter-spacing: -.01
 .validacao-rodape { color: var(--ink-soft); font-size: 12px; margin: 0; }
 @media (max-width: 380px) { .validacao-dados { grid-template-columns: 1fr; } }
 
+.secretaria-saldo { display: block; margin-top: 4px; color: var(--warn); font-size: 12px; font-weight: 650; }
 .preco-de-teste { grid-column: 1 / -1; color: var(--cvb-red); font-size: 12px; font-weight: 650; margin: 10px 0 0; padding-top: 10px; border-top: 1px dashed var(--cvb-red); }
 
 /* Painel da secretaria ---------------------------------------------------- */

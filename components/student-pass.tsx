@@ -4,7 +4,10 @@ import { useEffect, useState } from 'react'
 import { Download, Share2 } from 'lucide-react'
 import { RedCross } from '@/components/clinical-header'
 import { CodigoQr } from '@/components/qr-code'
-import { EnrollmentData, loadJson, maskCpf, STORAGE_KEYS } from '@/lib/enrollment'
+import {
+  COBRA_CURSO_A_PARTE, EnrollmentData, formatarBRL, loadJson, maskCpf,
+  PRECO_CURSO_CENTAVOS, ROTA_INSCRICAO, STORAGE_KEYS,
+} from '@/lib/enrollment'
 import { buscarInscricao, Inscricao } from '@/lib/api-cliente'
 import { ServiceWorkerRegistration } from '@/components/service-worker-registration'
 import { rastrear } from '@/lib/rastreio'
@@ -76,6 +79,17 @@ export function StudentPass() {
           ? <div className="status-block"><strong>Sua vaga está garantida.</strong><br />A secretaria confirma sua turma em até 2 dias úteis pelo WhatsApp.</div>
           : <div className="status-block pendente"><strong>Pagamento ainda não confirmado.</strong><br />Sua vaga é garantida assim que o pagamento cair.</div>}
         {inscricao && inscricao.passosRespondidos < 8 && <p className="reminder"><strong>Falta a triagem:</strong> você respondeu {inscricao.passosRespondidos} de 8 perguntas. Elas definem a melhor data para a sua turma.</p>}
+        {/*
+          O saldo do curso mora aqui porque a ficha é o endereço que o aluno
+          guarda — é onde ele volta. Só aparece com a matrícula já paga: antes
+          disso o que falta é a matrícula, e cobrar duas coisas na mesma tela
+          confundiria qual delas garante a vaga.
+        */}
+        {inscricao?.matriculaPaga && !inscricao.cursoPago && COBRA_CURSO_A_PARTE && <div className="status-block saldo">
+          <strong>Falta o curso: {formatarBRL(PRECO_CURSO_CENTAVOS)}.</strong><br />
+          Sua vaga já está garantida pela matrícula. Você pode pagar o curso agora ou até o dia da aula.
+          <a className="primary-button full" href={`${ROTA_INSCRICAO}?etapa=curso`}>Pagar o curso</a>
+        </div>}
         <p className="reminder"><strong>Lembrete para o dia:</strong> leve 1 kg de alimento não perecível e um documento com foto. O certificado físico será entregue presencialmente no dia do curso.</p>
       </div>
     </article>

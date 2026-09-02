@@ -6,7 +6,7 @@ import { traduzirStatus } from '@/lib/pagamento-status'
 import { espelharNaPlanilha } from '@/lib/planilha'
 import { consultarTransacao } from '@/lib/unicopag'
 import { supabaseServer } from '@/lib/supabase/server'
-import { MINUTOS_PARA_EXPIRAR, PRECO_CENTAVOS } from '@/lib/enrollment'
+import { COBRANCAS, ehEtapaDeCobranca, MINUTOS_PARA_EXPIRAR } from '@/lib/enrollment'
 import { contextoDoNavegador, enviarConversaoMeta } from '@/lib/meta-capi'
 import { removerDoPublicoDeAbandono } from '@/lib/meta-audiencia'
 import { notificarSecretaria } from '@/lib/webhook-secretaria'
@@ -30,10 +30,19 @@ export function GET(request: Request) {
     const inscricaoId = await lerInscricaoId()
     if (!inscricaoId) return erro('Nenhuma inscrição nesta sessão.', 401)
 
+    // Cada etapa tem a sua tela de pagamento, e uma não pode enxergar a
+    // cobrança da outra: sem este filtro, quem abrisse o pagamento do curso
+    // veria o QR da matrícula que acabou de pagar — e o contrário faria a
+    // tela da matrícula dar por paga uma inscrição que só quitou o curso.
+    const pedida = new URL(request.url).searchParams.get('etapa') ?? 'matricula'
+    if (!ehEtapaDeCobranca(pedida)) return erro('Etapa de cobrança inválida.', 422)
+    const esperado = COBRANCAS[pedida].centavos
+
     const { data, error } = await supabaseServer()
       .from('pagamentos')
-      .select('id, metodo, parcelas, valor_centavos, itens, status, provedor_id, pix_copia_cola, recusa_motivo, criado_em')
+      .select('id, metodo, etapa, parcelas, valor_centavos, itens, status, provedor_id, pix_copia_cola, recusa_motivo, criado_em')
       .eq('inscricao_id', inscricaoId)
+      .eq('etapa', pedida)
       .order('criado_em', { ascending: false })
       .limit(1)
       .maybeSingle()
@@ -47,11 +56,11 @@ export function GET(request: Request) {
     // Nunca reutilize uma cobrança criada com outro preço (por exemplo, uma
     // cobrança real de R$ 249 persistida antes do modo de teste de R$ 0,10).
     // Sem esta barreira, ela sobrescreve a tela e exibe também o QR antigo.
-    if (data.valor_centavos !== PRECO_CENTAVOS) {
+    if (data.valor_centavos !== esperado) {
       return NextResponse.json({
         existe: false,
         ignoradaPorPrecoDiferente: true,
-        precoAtualCentavos: PRECO_CENTAVOS,
+        precoAtualCentavos: esperado,
         simulacao: simulacaoAtiva(),
         confirmacaoManual: confirmacaoManualPermitida(),
       })
@@ -96,6 +105,7 @@ export function GET(request: Request) {
       existe: true,
       id: data.id,
       metodo: data.metodo,
+      etapa: data.etapa,
       parcelas: data.parcelas,
       valorCentavos: data.valor_centavos,
       itens: data.itens,

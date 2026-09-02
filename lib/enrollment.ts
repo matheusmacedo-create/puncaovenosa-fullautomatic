@@ -193,8 +193,58 @@ export const COMPOSICAO_PRECO: ItemDePreco[] = (() => {
   return teste === null ? COMPOSICAO_REAL : escalar(teste)
 })()
 
-/** Total cobrado. Derivado dos itens — nunca escreva o valor solto. */
+/** Preço cheio do curso. Derivado dos itens — nunca escreva o valor solto. */
 export const PRECO_CENTAVOS = COMPOSICAO_PRECO.reduce((soma, item) => soma + item.centavos, 0)
+
+/**
+ * O preço é cobrado em duas etapas, não de uma vez.
+ *
+ * A matrícula garante a vaga e abre a triagem; o curso é pago depois, até o
+ * dia da aula. É o que a landing sempre anunciou — o botão diz "FAZER MINHA
+ * MATRÍCULA POR R$ 99" e o quadro de investimento separa as duas linhas.
+ * Enquanto o checkout abria um PIX único de R$ 249, quem clicava naquele
+ * botão recebia uma cobrança com mais que o dobro do prometido, no momento
+ * de maior desconfiança do funil.
+ *
+ * Cada etapa carrega os itens que a compõem, e não só o total: é o que a
+ * constraint `itens_somam_o_valor` exige e o que faz o comprovante dizer o
+ * que foi pago naquele dia.
+ */
+export type EtapaDeCobranca = 'matricula' | 'curso'
+
+export const ETAPAS_DE_COBRANCA: readonly EtapaDeCobranca[] = ['matricula', 'curso']
+
+export const ehEtapaDeCobranca = (valor: unknown): valor is EtapaDeCobranca =>
+  valor === 'matricula' || valor === 'curso'
+
+/**
+ * Sob preço de teste baixo demais para repartir, a composição vira um item
+ * único ('teste'): aí tudo entra na matrícula e a etapa do curso fica vazia.
+ * `COBRA_CURSO_A_PARTE` é o que o resto do funil consulta para não oferecer
+ * uma segunda cobrança de zero reais.
+ */
+function cobrancaDe(etapa: EtapaDeCobranca) {
+  const proprios = COMPOSICAO_PRECO.filter(item => item.id === etapa)
+  const itens = proprios.length ? proprios : etapa === 'matricula' ? COMPOSICAO_PRECO : []
+  return { itens, centavos: itens.reduce((soma, item) => soma + item.centavos, 0) }
+}
+
+export const COBRANCAS: Record<EtapaDeCobranca, { itens: ItemDePreco[]; centavos: number }> = {
+  matricula: cobrancaDe('matricula'),
+  curso: cobrancaDe('curso'),
+}
+
+/** O que o aluno paga para garantir a vaga — o valor anunciado no anúncio. */
+export const PRECO_MATRICULA_CENTAVOS = COBRANCAS.matricula.centavos
+/** O que fica em aberto até o dia da aula. */
+export const PRECO_CURSO_CENTAVOS = COBRANCAS.curso.centavos
+
+export const COBRA_CURSO_A_PARTE = PRECO_CURSO_CENTAVOS > 0
+
+export const ROTULO_DA_ETAPA: Record<EtapaDeCobranca, string> = {
+  matricula: 'Matrícula',
+  curso: 'Curso presencial',
+}
 
 export const MAX_PARCELAS = 12
 

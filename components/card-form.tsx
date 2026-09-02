@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { CreditCard, Loader2, Lock } from 'lucide-react'
 import {
   bandeiraDoCartao, cardFieldError, CARTAO_VAZIO, DadosCartao, digits, formatarBRL,
-  maskCardNumber, maskValidade, parcelasDisponiveis, PRECO_CENTAVOS,
+  maskCardNumber, maskValidade, parcelasDisponiveis, PRECO_MATRICULA_CENTAVOS,
 } from '@/lib/enrollment'
 
 const NOMES_DE_BANDEIRA: Record<string, string> = {
@@ -24,15 +24,17 @@ const NOMES_DE_BANDEIRA: Record<string, string> = {
  * tudo o que o aluno digitou. Continua só em memória — nunca em
  * localStorage, que é exatamente o que a PCI-DSS proíbe.
  */
-export function CardForm({ enviando, cartao, setCartao, onSubmit }: {
+export function CardForm({ enviando, cartao, setCartao, onSubmit, valorCentavos = PRECO_MATRICULA_CENTAVOS }: {
   enviando: boolean
   cartao: DadosCartao
   setCartao: (atualizar: (anterior: DadosCartao) => DadosCartao) => void
   onSubmit: (dados: DadosCartao) => void
+  /** Quanto esta cobrança vai levar — matrícula ou saldo do curso. */
+  valorCentavos?: number
 }) {
   const [erros, setErros] = useState<Partial<Record<keyof DadosCartao, string>>>({})
   const bandeira = bandeiraDoCartao(cartao.numero)
-  const parcelas = parcelasDisponiveis()
+  const parcelas = parcelasDisponiveis(valorCentavos)
 
   const mudar = <K extends keyof DadosCartao>(campo: K, valor: DadosCartao[K]) => {
     setCartao(c => ({ ...c, [campo]: valor }))
@@ -89,11 +91,11 @@ export function CardForm({ enviando, cartao, setCartao, onSubmit }: {
       <select id="card-parcelas" value={cartao.parcelas} onChange={e => mudar('parcelas', Number(e.target.value))}>
         {parcelas.map(p => <option key={p.numero} value={p.numero}>{p.numero}x de {formatarBRL(p.valorCentavos)}{p.numero === 1 ? ' à vista' : ''}</option>)}
       </select>
-      <p className="help">Total de {formatarBRL(PRECO_CENTAVOS)} em {escolhida?.numero ?? 1}x. Sem juros.</p>
+      <p className="help">Total de {formatarBRL(valorCentavos)} em {escolhida?.numero ?? 1}x. Sem juros.</p>
     </div>
 
     <button className="primary-button full" onClick={enviar} disabled={enviando}>
-      {enviando ? <><Loader2 className="spin" /> Processando…</> : <>Pagar {formatarBRL(PRECO_CENTAVOS)}</>}
+      {enviando ? <><Loader2 className="spin" /> Processando…</> : <>Pagar {formatarBRL(valorCentavos)}</>}
     </button>
     <p className="secure-note"><Lock aria-hidden="true" /> Seus dados vão criptografados direto para a operadora. O número do cartão não é gravado por nós.</p>
   </div>

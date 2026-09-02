@@ -2,7 +2,7 @@
 
 import type { Endereco } from '@/lib/cep'
 import type { Atribuicao } from '@/lib/checkout'
-import { EnrollmentData, PagamentoMetodo, PagamentoStatus } from '@/lib/enrollment'
+import { EnrollmentData, EtapaDeCobranca, PagamentoMetodo, PagamentoStatus } from '@/lib/enrollment'
 
 /**
  * Chamadas do navegador para as rotas do funil.
@@ -22,6 +22,10 @@ export type Inscricao = {
   /** Endereço que o QR Code da ficha carrega, para conferência presencial. */
   validacaoUrl: string
   passosRespondidos: number
+  /** Matrícula quitada — é ela que garante a vaga. */
+  matriculaPaga: boolean
+  /** Saldo do curso quitado. Falso enquanto houver o que pagar. */
+  cursoPago: boolean
 }
 
 export type ItemDePreco = { id: string; rotulo: string; detalhe?: string; centavos: number }
@@ -29,6 +33,8 @@ export type ItemDePreco = { id: string; rotulo: string; detalhe?: string; centav
 export type Cobranca = {
   id: string
   metodo: PagamentoMetodo
+  /** Que parte do preço esta cobrança cobre — matrícula ou curso. */
+  etapa: EtapaDeCobranca
   parcelas: number
   valorCentavos: number
   itens: ItemDePreco[] | null
@@ -88,11 +94,14 @@ export const consultarCpf = (cpf: string) =>
  */
 export const criarCobranca = (payload: {
   metodo: PagamentoMetodo
+  /** Omitida, o servidor cobra a matrícula — a única etapa antes da vaga. */
+  etapa?: EtapaDeCobranca
   parcelas?: number
   cartao?: { numero: string; nome: string; validade: string; cvv: string }
 }) => pedir<Cobranca>('/api/pagamentos', { method: 'POST', body: JSON.stringify(payload) })
 
-export const buscarCobranca = () => pedir<Cobranca & { existe: boolean }>('/api/pagamentos/atual')
+export const buscarCobranca = (etapa: EtapaDeCobranca = 'matricula') =>
+  pedir<Cobranca & { existe: boolean }>(`/api/pagamentos/atual?etapa=${etapa}`)
 
 export const confirmarCobranca = (pagamentoId: string) =>
   pedir<{ numeroInscricao: string | null; jaConfirmado: boolean }>(
