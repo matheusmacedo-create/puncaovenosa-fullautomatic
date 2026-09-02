@@ -1,6 +1,6 @@
 'use client'
 
-import Image from 'next/image'
+import { LogoInstitucional } from '@/components/logo-institucional'
 import { Mail, MapPin } from 'lucide-react'
 import { FacebookIcon, InstagramIcon, WhatsappIcon } from '@/components/brand-icons'
 import { PendingInfo } from '@/components/pending-info'
@@ -20,14 +20,7 @@ export function InstitutionalFooter() {
         <div className="flex flex-col gap-10 md:grid md:grid-cols-2 md:gap-10 lg:grid-cols-[1fr_0.8fr_1.25fr_0.7fr]">
           {/* Instituição */}
           <div className="order-1">
-            <Image
-              src="/logo-cvb-rj.png"
-              alt={courseData.institution}
-              width={360}
-              height={148}
-              loading="lazy"
-              className="h-10 w-auto"
-            />
+            <LogoInstitucional alt={courseData.institution} className="h-10 w-auto" />
             <p className="mt-4 max-w-[250px] text-xs leading-relaxed text-muted-foreground">
               {institutionContact.principles}
             </p>

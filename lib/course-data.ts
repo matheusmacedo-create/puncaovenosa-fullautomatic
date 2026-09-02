@@ -7,7 +7,12 @@ export type InstitutionalIndicator = {
 }
 
 export type CoursePhoto = {
-  src: string | null
+  /**
+   * Caminho sem sufixo nem extensão — `/fotos/imagem-05`. O componente
+   * `Foto` completa com `-640`/`-1080` e `.avif`/`.webp`, que é o que
+   * `scripts/otimizar-fotos.mjs` gera. `null` esconde a foto.
+   */
+  base: string | null
   alt: string
   caption: string
 }
@@ -104,7 +109,7 @@ export const institutionContact = {
  * prática do aluno — a imagem representa apenas o tema do curso.
  */
 export const heroPhoto: CoursePhoto = {
-  src: '/fotos/imagem-05-1080.webp',
+  base: '/fotos/imagem-05',
   alt: 'Punção venosa sendo demonstrada em um braço de simulação sobre a mesa de uma sala de aula',
   caption: 'Imagem ilustrativa.',
 }
@@ -114,7 +119,7 @@ export const heroPhoto: CoursePhoto = {
  * por isso a legenda a identifica explicitamente como ilustrativa.
  */
 export const contentPhoto: CoursePhoto = {
-  src: '/fotos/imagem-06-1080.webp',
+  base: '/fotos/imagem-06',
   alt: `Instrutor apresentando materiais de punção venosa em sala de aula da ${INSTITUTION_NAME}`,
   caption: 'Imagem ilustrativa do ambiente de aprendizagem.',
 }
