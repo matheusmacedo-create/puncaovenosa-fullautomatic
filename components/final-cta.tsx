@@ -7,7 +7,7 @@ export function FinalCTA() {
     <section
       id="cta-final"
       aria-labelledby="final-cta-title"
-      className="border-t border-border px-5 py-16 sm:px-8 md:py-20"
+      className="border-t border-border px-5 py-12 sm:px-8 sm:py-16 md:py-20"
     >
       <div className="mx-auto w-full max-w-3xl text-center">
         <h2

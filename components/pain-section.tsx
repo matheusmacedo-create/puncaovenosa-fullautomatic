@@ -15,7 +15,7 @@ export function PainSection() {
         Se você quer chegar mais preparado ao dia a dia da saúde, este curso pode ajudar
       </SectionTitle>
 
-      <ul className="mt-8 grid gap-3 sm:grid-cols-2">
+      <ul className="mt-6 sm:mt-8 grid gap-3 sm:grid-cols-2">
         {points.map((point) => (
           <li
             key={point}

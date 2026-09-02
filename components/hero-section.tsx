@@ -41,7 +41,7 @@ export function HeroSection() {
 
   return (
     <section
-      className="border-b border-border px-5 py-12 sm:px-8 md:py-16"
+      className="border-b border-border px-5 py-8 sm:px-8 sm:py-12 md:py-16"
       aria-labelledby="hero-title"
     >
       <div className="mx-auto w-full max-w-[1120px] lg:grid lg:grid-cols-[minmax(0,1fr)_40%] lg:gap-x-14">

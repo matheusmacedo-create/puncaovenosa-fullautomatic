@@ -42,7 +42,7 @@ export function BenefitsGrid() {
         Formação institucional com foco na compreensão da técnica
       </SectionTitle>
 
-      <ul className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <ul className="mt-6 sm:mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {benefits.map(({ icon: Icon, title, text }) => (
           <li key={title} className="rounded-md border border-border bg-background p-5">
             <Icon className="size-5 text-primary" aria-hidden="true" />

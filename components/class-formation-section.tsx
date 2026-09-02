@@ -36,7 +36,7 @@ export function ClassFormationSection() {
       </p>
 
       {/* Sequência real do processo: a numeração é load-bearing aqui. */}
-      <ol className="mt-8 grid gap-px overflow-hidden rounded-md border border-border bg-border sm:grid-cols-2">
+      <ol className="mt-6 sm:mt-8 grid gap-px overflow-hidden rounded-md border border-border bg-border sm:grid-cols-2">
         {steps.map((step, index) => (
           <li key={step.title} className="flex gap-4 bg-background p-5">
             <span className="text-xs font-semibold tabular-nums text-primary">
