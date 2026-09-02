@@ -6,6 +6,7 @@ import { espelharNaPlanilha } from '@/lib/planilha'
 import { lerInscricaoId } from '@/lib/session'
 import { confirmacaoManualPermitida } from '@/lib/simulacao'
 import { supabaseServer } from '@/lib/supabase/server'
+import { enviarComprovanteDePagamento } from '@/lib/email'
 import { notificarSecretaria } from '@/lib/webhook-secretaria'
 
 type Payload = { pagamentoId?: string }
@@ -62,6 +63,7 @@ export function POST(request: Request) {
     if (!data.ja_confirmado) {
       espelharNaPlanilha(inscricaoId)
       notificarSecretaria(inscricaoId, 'pagamento_confirmado')
+      enviarComprovanteDePagamento(inscricaoId, body.pagamentoId)
       enviarConversaoMeta(inscricaoId, 'pago', { pagamentoId: body.pagamentoId, contexto: contextoDoNavegador(request) })
       removerDoPublicoDeAbandono(inscricaoId)
     }

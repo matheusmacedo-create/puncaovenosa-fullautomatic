@@ -5,6 +5,7 @@ import { corpo, erro, rota } from '@/lib/http'
 import { contextoDoNavegador, enviarConversaoMeta } from '@/lib/meta-capi'
 import { lerInscricaoId } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabase/server'
+import { enviarEmailTransacional } from '@/lib/email'
 import { notificarSecretaria } from '@/lib/webhook-secretaria'
 
 type Payload = { passo?: number; resposta?: unknown }
@@ -90,6 +91,7 @@ export function PUT(request: Request) {
 
     if (concluida === true) {
       notificarSecretaria(inscricaoId, 'triagem_concluida')
+      enviarEmailTransacional(inscricaoId, 'triagem_concluida')
       enviarConversaoMeta(inscricaoId, 'triagemFim', { contexto: contextoDoNavegador(request) })
     }
 
