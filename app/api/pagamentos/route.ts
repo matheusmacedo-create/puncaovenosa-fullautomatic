@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { courseData } from '@/lib/course-data'
 import {
-  COMPOSICAO_PRECO, digits, MAX_PARCELAS, MINUTOS_PARA_EXPIRAR, PIX_RECEBEDOR, PRECO_CENTAVOS,
+  COBRA_CURSO_A_PARTE, COBRANCAS, digits, ehEtapaDeCobranca, MAX_PARCELAS,
+  MINUTOS_PARA_EXPIRAR, PIX_RECEBEDOR,
 } from '@/lib/enrollment'
 import { corpo, erro, rota } from '@/lib/http'
 import { traduzirStatus } from '@/lib/pagamento-status'
@@ -24,7 +25,7 @@ export const maxDuration = 60
 
 
 type Cartao = { numero?: string; nome?: string; validade?: string; cvv?: string }
-type Payload = { metodo?: 'pix' | 'cartao'; parcelas?: number; cartao?: Cartao }
+type Payload = { metodo?: 'pix' | 'cartao'; parcelas?: number; cartao?: Cartao; etapa?: string }
 
 /** Dias que a cobrança PIX aceita pagamento no provedor. O contador de 30 min da tela é da interface. */
 const DIAS_PARA_EXPIRAR = 1
@@ -58,6 +59,15 @@ export function POST(request: Request) {
     }
     if (metodo === 'pix' && body.cartao) return erro('PIX não usa dados de cartão.', 422)
 
+    // Que parte do preço esta cobrança cobre. O padrão é a matrícula: é ela
+    // que o anúncio promete e a única que existe antes da vaga garantida.
+    const etapa = body.etapa === undefined ? 'matricula' : body.etapa
+    if (!ehEtapaDeCobranca(etapa)) return erro('Etapa de cobrança inválida.', 422)
+    if (etapa === 'curso' && !COBRA_CURSO_A_PARTE) {
+      return erro('O curso não é cobrado à parte com o preço em vigor.', 422)
+    }
+    const aCobrar = COBRANCAS[etapa]
+
     const supabase = supabaseServer()
     const { data: inscricao, error: erroInscricao } = await supabase
       .from('inscricoes')
@@ -70,6 +80,31 @@ export function POST(request: Request) {
       return erro('Não foi possível abrir a cobrança.', 502)
     }
     if (!inscricao) return erro('Inscrição não encontrada.', 404)
+
+    // Etapa já quitada não é cobrada de novo, e o curso só é oferecido
+    // depois da vaga garantida. É aqui que essa garantia mora: o banco não
+    // tem restrição de unicidade entre as confirmadas de propósito (ver a
+    // migration 0014), justamente para nunca recusar dinheiro que entrou.
+    const { data: confirmadas, error: erroConfirmadas } = await supabase
+      .from('pagamentos')
+      .select('etapa')
+      .eq('inscricao_id', inscricaoId)
+      .eq('status', 'confirmado')
+
+    if (erroConfirmadas) {
+      console.error('[funil] leitura das cobranças confirmadas falhou:', erroConfirmadas)
+      return erro('Não foi possível abrir a cobrança.', 502)
+    }
+
+    // `integral` é a cobrança antiga, de quando matrícula e curso saíam num
+    // PIX só: quem pagou uma dessas não deve mais nada.
+    const pagas = new Set((confirmadas ?? []).map(p => p.etapa))
+    if (pagas.has('integral') || pagas.has(etapa)) {
+      return erro(etapa === 'curso' ? 'O curso desta inscrição já está pago.' : 'Esta inscrição já está paga.', 409)
+    }
+    if (etapa === 'curso' && !pagas.has('matricula')) {
+      return erro('A matrícula precisa estar paga antes do curso.', 409)
+    }
 
     const simulando = simulacaoAtiva()
 
@@ -85,10 +120,12 @@ export function POST(request: Request) {
       const validaDesde = new Date(Date.now() - (simulando ? MINUTOS_PARA_EXPIRAR * 60_000 : 20 * 3_600_000)).toISOString()
       const { data: aberta } = await supabase
         .from('pagamentos')
-        .select('id, metodo, parcelas, valor_centavos, itens, status, pix_copia_cola, criado_em')
+        .select('id, metodo, etapa, parcelas, valor_centavos, itens, status, pix_copia_cola, criado_em')
         .eq('inscricao_id', inscricaoId)
         .eq('metodo', 'pix')
+        .eq('etapa', etapa)
         .eq('status', 'pendente')
+        .eq('valor_centavos', aCobrar.centavos)
         .not('pix_copia_cola', 'is', null)
         .gte('criado_em', validaDesde)
         .order('criado_em', { ascending: false })
@@ -98,6 +135,7 @@ export function POST(request: Request) {
         return NextResponse.json({
           id: aberta.id,
           metodo: aberta.metodo,
+          etapa: aberta.etapa,
           parcelas: aberta.parcelas,
           valorCentavos: aberta.valor_centavos,
           itens: aberta.itens,
@@ -120,7 +158,7 @@ export function POST(request: Request) {
 
     if (simulando) {
       pixCopiaCola = metodo === 'pix'
-        ? gerarPixCopiaCola({ ...PIX_RECEBEDOR, valorCentavos: PRECO_CENTAVOS, txid })
+        ? gerarPixCopiaCola({ ...PIX_RECEBEDOR, valorCentavos: aCobrar.centavos, txid })
         : null
     } else {
       if (!inscricao.email) return erro('Informe seu e-mail antes de pagar.', 422)
@@ -133,7 +171,7 @@ export function POST(request: Request) {
 
       const validade = digits(cartao?.validade ?? '')
       const payload: NovoPagamento = {
-        amount: PRECO_CENTAVOS,
+        amount: aCobrar.centavos,
         payment_method: metodo === 'pix' ? 'pix' : 'credit_card',
         installments: parcelas,
         customer: {
@@ -148,7 +186,7 @@ export function POST(request: Request) {
         // Na nossa própria tela o nome já aparece no título da página, então
         // `rotulo` continua enxuto lá — só o que vai para o provedor leva o
         // prefixo.
-        cart: COMPOSICAO_PRECO.map(item => ({
+        cart: aCobrar.itens.map(item => ({
           hash: item.id,
           title: `${courseData.courseName} — ${item.rotulo}`,
           price: item.centavos,
@@ -160,7 +198,7 @@ export function POST(request: Request) {
         // Reforça no dashboard da Únicopag quem comprou e o quê, além do que
         // já vai em `customer` e em `cart` — `metadata` é onde o painel deles
         // costuma mostrar informação extra sobre a transação.
-        metadata: { inscricao_id: inscricaoId, referencia: txid, curso: courseData.courseName, aluno: inscricao.nome },
+        metadata: { inscricao_id: inscricaoId, referencia: txid, curso: courseData.courseName, aluno: inscricao.nome, etapa },
         ...(metodo === 'cartao' && cartao
           ? {
               card: {
@@ -195,8 +233,9 @@ export function POST(request: Request) {
       .from('pagamentos')
       .insert({
         inscricao_id: inscricaoId,
-        valor_centavos: PRECO_CENTAVOS,
-        itens: COMPOSICAO_PRECO,
+        valor_centavos: aCobrar.centavos,
+        itens: aCobrar.itens,
+        etapa,
         metodo,
         parcelas,
         status: statusInicial,
@@ -207,7 +246,7 @@ export function POST(request: Request) {
         pix_copia_cola: pixCopiaCola,
         confirmado_em: statusInicial === 'confirmado' ? new Date().toISOString() : null,
       })
-      .select('id, metodo, parcelas, valor_centavos, itens, status, pix_copia_cola, criado_em')
+      .select('id, metodo, etapa, parcelas, valor_centavos, itens, status, pix_copia_cola, criado_em')
       .single()
 
     if (error || !data) {
@@ -221,6 +260,7 @@ export function POST(request: Request) {
     return NextResponse.json({
       id: data.id,
       metodo: data.metodo,
+      etapa: data.etapa,
       parcelas: data.parcelas,
       valorCentavos: data.valor_centavos,
       itens: data.itens,

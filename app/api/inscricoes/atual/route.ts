@@ -34,6 +34,17 @@ export function GET(request: Request) {
       .select('id', { count: 'exact', head: true })
       .eq('inscricao_id', id)
 
+    // Que partes do preço já foram quitadas. `integral` é a cobrança antiga,
+    // de quando matrícula e curso saíam num PIX só: ela cobre as duas.
+    const { data: quitadas } = await supabase
+      .from('pagamentos')
+      .select('etapa')
+      .eq('inscricao_id', id)
+      .eq('status', 'confirmado')
+
+    const pagas = new Set((quitadas ?? []).map(p => p.etapa))
+    const cursoPago = pagas.has('curso') || pagas.has('integral')
+
     return NextResponse.json({
       id: data.id,
       nome: data.nome,
@@ -46,6 +57,8 @@ export function GET(request: Request) {
       // funcionar na câmera de qualquer celular, fora do nosso domínio.
       validacaoUrl: `${siteUrl() ?? new URL(request.url).origin}/validar/${data.token_validacao}`,
       passosRespondidos: count ?? 0,
+      matriculaPaga: pagas.has('matricula') || pagas.has('integral'),
+      cursoPago,
     })
   })
 }

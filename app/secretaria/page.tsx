@@ -4,7 +4,9 @@ import { SecretariaAbas } from '@/components/secretaria-abas'
 import { SecretariaInscricoes, type LinhaInscricao } from '@/components/secretaria-inscricoes'
 import { SecretariaMapa, type PontoMapa } from '@/components/secretaria-mapa'
 import { coordsDaResposta, resumoDaResposta } from '@/lib/cep'
-import { formatarBRL, maskCpf, maskPhone, triageQuestions } from '@/lib/enrollment'
+import {
+  COBRA_CURSO_A_PARTE, formatarBRL, maskCpf, maskPhone, PRECO_CURSO_CENTAVOS, triageQuestions,
+} from '@/lib/enrollment'
 import { metaCapiConfigurado } from '@/lib/meta-capi'
 import { CHAVES, PAGINAS, caminhoDaPagina } from '@/lib/paginas-de-venda'
 import { audienciaConfigurada, JANELA_DE_ABANDONO_HORAS } from '@/lib/meta-audiencia'
@@ -180,7 +182,7 @@ export default async function SecretariaPage({
   const [{ data: pagamentos }, { data: respostas }] = await Promise.all([
     ids.length
       ? supabase.from('pagamentos')
-          .select('inscricao_id, status, metodo, valor_centavos, criado_em')
+          .select('inscricao_id, status, etapa, metodo, valor_centavos, criado_em')
           .in('inscricao_id', ids)
           .order('criado_em', { ascending: false })
       : Promise.resolve({ data: [] as never[] }),
@@ -195,6 +197,14 @@ export default async function SecretariaPage({
   // primeira de cada inscrição é a certa.
   const ultimaCobranca = new Map<string, { status: string; metodo: string | null; valor_centavos: number }>()
   for (const p of pagamentos ?? []) if (!ultimaCobranca.has(p.inscricao_id)) ultimaCobranca.set(p.inscricao_id, p)
+
+  // Quem já quitou o curso. `integral` é a cobrança antiga, de quando as duas
+  // partes saíam num PIX só — quem pagou uma dessas não deve nada.
+  const cursoQuitado = new Set(
+    (pagamentos ?? [])
+      .filter(p => p.status === 'confirmado' && (p.etapa === 'curso' || p.etapa === 'integral'))
+      .map(p => p.inscricao_id),
+  )
 
   const triagem = new Map<string, Map<number, unknown>>()
   for (const r of respostas ?? []) {
@@ -285,6 +295,9 @@ export default async function SecretariaPage({
     const cobranca = ultimaCobranca.get(i.id)
     const respostasDaPessoa = triagem.get(i.id)
     const paga = i.status === 'paga' || i.status === 'triagem_concluida'
+    // Vaga garantida pela matrícula, mas o curso ainda em aberto: é a
+    // cobrança que a secretaria precisa fazer antes do dia da aula.
+    const deveOCurso = paga && !cursoQuitado.has(i.id) && COBRA_CURSO_A_PARTE
     return {
       id: i.id,
       quando: dataHora(i.criado_em),
@@ -297,6 +310,8 @@ export default async function SecretariaPage({
       status: i.status,
       pagamento: cobranca?.status ?? null,
       pagamentoDetalhe: cobranca ? `${cobranca.metodo} · ${formatarBRL(cobranca.valor_centavos)}` : null,
+      deveOCurso,
+      saldo: deveOCurso ? `falta ${formatarBRL(PRECO_CURSO_CENTAVOS)} do curso` : null,
       respostas: PASSOS_UTEIS.map(p =>
         respostasDaPessoa?.has(p.passo) ? respostaLegivel(p.passo, respostasDaPessoa.get(p.passo)) : '—',
       ),
@@ -317,8 +332,11 @@ export default async function SecretariaPage({
    * lista de problemas e ensina a ignorar o bloco. Item que está resolvido
    * não aparece; sem nada pendente, o bloco vira uma linha dizendo isso.
    */
+  const devendoOCurso = linhasInscricoes.filter(l => l.deveOCurso).length
+
   const atencao = [
     aguardando > 0 && { texto: `${aguardando} abriram cobrança e não pagaram`, acao: 'Aba Inscrições, recorte "Falta pagar".' },
+    devendoOCurso > 0 && { texto: `${devendoOCurso} com vaga garantida devem o curso (${formatarBRL(PRECO_CURSO_CENTAVOS)} cada)`, acao: 'Aba Inscrições, recorte "Deve o curso". Cobrar antes do dia da aula.' },
     pagouSoTriagemFalta > 0 && { texto: `${pagouSoTriagemFalta} pagaram e não terminaram a triagem`, acao: 'Aba Inscrições, recorte "Pagou, falta triagem".' },
     falhasDePagamento > 0 && { texto: `${falhasDePagamento} cobranças recusadas, expiradas ou estornadas`, acao: 'Confira na coluna Pagamento da lista.' },
     falhasRecentes > 0 && { texto: `${falhasRecentes} entregas do webhook falharam`, acao: 'Aba Diagnóstico, bloco do webhook — dá para reenviar por lá.' },

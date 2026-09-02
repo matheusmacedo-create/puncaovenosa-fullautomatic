@@ -63,7 +63,15 @@ export function OfferCard() {
             </div>
           </dl>
 
-          <p className="mt-4 text-sm text-muted-foreground">
+          {/*
+            Quando cada parte vence, e não só quanto custa: são duas cobranças
+            de verdade, e quem não sabe disso na hora de pagar a matrícula
+            descobre no dia da aula — a pior hora possível.
+          */}
+          <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
+            Você paga a matrícula agora, e ela garante sua vaga. O curso você paga até o dia da aula.
+          </p>
+          <p className="mt-2 text-sm text-muted-foreground">
             Pagamento: {courseData.paymentMethods}
           </p>
 

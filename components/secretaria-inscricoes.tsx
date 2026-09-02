@@ -17,6 +17,10 @@ export type LinhaInscricao = {
   status: string
   pagamento: string | null
   pagamentoDetalhe: string | null
+  /** Vaga garantida, mas o saldo do curso ainda em aberto. */
+  deveOCurso: boolean
+  /** Texto do saldo pendente, pronto para exibir. Nulo quando não deve nada. */
+  saldo: string | null
   /** Uma entrada por coluna de triagem, na mesma ordem de `colunas`. */
   respostas: string[]
   /** Nome, CPF, e-mail, telefone e número, já em minúsculas e sem acento. */
@@ -29,6 +33,9 @@ const FILTROS = [
   { id: 'aguardando', rotulo: 'Falta pagar', combina: (l: LinhaInscricao) => l.status === 'rascunho' || l.status === 'aguardando_pagamento' },
   { id: 'triagem', rotulo: 'Pagou, falta triagem', combina: (l: LinhaInscricao) => l.status === 'paga' },
   { id: 'completa', rotulo: 'Matrícula completa', combina: (l: LinhaInscricao) => l.status === 'triagem_concluida' },
+  // Recorte de cobrança, não de funil: são alunos com vaga garantida de quem
+  // a secretaria ainda precisa receber antes do dia da aula.
+  { id: 'deve-curso', rotulo: 'Deve o curso', combina: (l: LinhaInscricao) => l.deveOCurso },
 ] as const
 
 const semAcento = (v: string) => v.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
@@ -135,6 +142,7 @@ export function SecretariaInscricoes({ linhas, colunas }: {
                     {l.pagamento}
                     <span className="secretaria-sub">{l.pagamentoDetalhe}</span>
                   </> : <span className="secretaria-sub">sem cobrança</span>}
+                  {l.saldo && <span className="secretaria-saldo">{l.saldo}</span>}
                 </td>
                 {l.respostas.map((resposta, i) => (
                   <td key={colunas[i].passo} className="secretaria-triagem" title={colunas[i].pergunta}>

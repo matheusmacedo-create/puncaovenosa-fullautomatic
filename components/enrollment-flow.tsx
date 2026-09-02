@@ -10,9 +10,10 @@ import { PriceBreakdown } from '@/components/price-breakdown'
 import { atribuicaoAtual } from '@/lib/checkout'
 import { courseData } from '@/lib/course-data'
 import {
-  CARTAO_VAZIO, DadosCartao, digits, EnrollmentData, fieldError, formatarBRL,
-  loadJson, maskCpf, maskPhone, MENSAGEM_FECHAR_CHECKOUT, PagamentoMetodo, PRECO_CENTAVOS,
-  ROTA_INSCRICAO, saveJson, STORAGE_KEYS,
+  CARTAO_VAZIO, COBRA_CURSO_A_PARTE, COBRANCAS, DadosCartao, digits, EnrollmentData,
+  EtapaDeCobranca, fieldError, formatarBRL, loadJson, maskCpf, maskPhone,
+  MENSAGEM_FECHAR_CHECKOUT, PagamentoMetodo, PRECO_CURSO_CENTAVOS,
+  PRECO_MATRICULA_CENTAVOS, ROTA_INSCRICAO, saveJson, STORAGE_KEYS,
 } from '@/lib/enrollment'
 import {
   buscarCobranca, Cobranca, confirmarCobranca, consultarCpf, criarCobranca, encerrarCobranca,
@@ -20,7 +21,15 @@ import {
 } from '@/lib/api-cliente'
 import { rastrear } from '@/lib/rastreio'
 
-type Stage = 'dados' | 'pagamento' | 'confirmado'
+/**
+ * `pagamento` cobra a matrícula, que garante a vaga e abre a triagem;
+ * `curso` cobra o saldo, depois, a partir da ficha do aluno. São telas
+ * separadas de propósito: cada uma tem a sua cobrança no banco, e misturar
+ * as duas faria a tela do curso exibir o QR já pago da matrícula.
+ */
+type Stage = 'dados' | 'pagamento' | 'confirmado' | 'curso' | 'curso-pago'
+
+const ETAPA_DA_TELA: Record<string, EtapaDeCobranca> = { pagamento: 'matricula', curso: 'curso' }
 type Cadastro = { primeiroNome: string; telefoneFinal: string; jaPaga: boolean }
 
 const EMPTY: EnrollmentData = { name: '', phone: '', cpf: '', email: '', highSchool: false }
@@ -33,6 +42,10 @@ export function EnrollmentFlow() {
   const router = useRouter()
   const stage = search.get('etapa') as Stage | null
   const open = !!stage
+  // Qual das duas cobranças esta tela está tratando.
+  const etapaDaCobranca: EtapaDeCobranca = stage === 'curso' ? 'curso' : 'matricula'
+  // Para onde ir quando o dinheiro cai — cada etapa tem a sua confirmação.
+  const telaDeSucesso: Stage = etapaDaCobranca === 'curso' ? 'curso-pago' : 'confirmado'
   const [data, setData] = useState<EnrollmentData>(EMPTY)
   const [errors, setErrors] = useState<Partial<Record<keyof EnrollmentData, string>>>({})
   const [cadastro, setCadastro] = useState<Cadastro | null>(null)
@@ -140,7 +153,7 @@ export function EnrollmentFlow() {
       // reaproveita cobrança PIX aberta. O catch vazio só evita rejeição sem
       // dono se a pessoa fechar antes; o erro de verdade é tratado por quem
       // consome o prefetch.
-      cobrancaPrefetch.current = criarCobranca({ metodo: 'pix' })
+      cobrancaPrefetch.current = criarCobranca({ metodo: 'pix', etapa: 'matricula' })
       cobrancaPrefetch.current.catch(() => undefined)
       go('pagamento')
     } catch (e) {
@@ -150,7 +163,7 @@ export function EnrollmentFlow() {
 
   // Ao entrar na etapa de pagamento, recupera a cobrança aberta — ou cria uma.
   useEffect(() => {
-    if (stage !== 'pagamento') return
+    if (!ETAPA_DA_TELA[stage ?? '']) return
     let cancelado = false
     ;(async () => {
       try {
@@ -158,7 +171,8 @@ export function EnrollmentFlow() {
         // criada desde o clique — só falta a resposta chegar. A consulta de
         // cobrança existente fica para quem entra na etapa sem prefetch
         // (recarregou a página ou voltou outro dia).
-        const prefetch = cobrancaPrefetch.current
+        // O prefetch é sempre da matrícula: ele nasce no envio do cadastro.
+        const prefetch = etapaDaCobranca === 'matricula' ? cobrancaPrefetch.current : null
         if (prefetch) {
           cobrancaPrefetch.current = null
           const nova = await prefetch
@@ -167,15 +181,15 @@ export function EnrollmentFlow() {
           rastrear('pagamento', { dados: { metodo: nova.metodo }, id: nova.id, valorCentavos: nova.valorCentavos, umaVezSo: true })
           return
         }
-        const atual = await buscarCobranca()
+        const atual = await buscarCobranca(etapaDaCobranca)
         if (cancelado) return
         if (atual.existe && atual.status === 'pendente') {
           setCobranca(atual); setMetodo(atual.metodo)
           rastrear('pagamento', { dados: { metodo: atual.metodo }, id: atual.id, valorCentavos: atual.valorCentavos, umaVezSo: true })
           return
         }
-        if (atual.existe && atual.status === 'confirmado') { registrarVenda(atual.id, atual.valorCentavos); go('confirmado'); return }
-        const nova = await criarCobranca({ metodo: 'pix' })
+        if (atual.existe && atual.status === 'confirmado') { registrarVenda(atual.id, atual.valorCentavos); go(telaDeSucesso); return }
+        const nova = await criarCobranca({ metodo: 'pix', etapa: etapaDaCobranca })
         if (cancelado) return
         setCobranca(nova)
         // Etapa 4: existe uma cobrança de verdade esperando pagamento. Só
@@ -186,21 +200,21 @@ export function EnrollmentFlow() {
       }
     })()
     return () => { cancelado = true }
-  }, [stage, go])
+  }, [stage, go, etapaDaCobranca, telaDeSucesso, registrarVenda])
 
   // Enquanto a cobrança está pendente, pergunta ao servidor se o dinheiro caiu.
   useEffect(() => {
-    if (stage !== 'pagamento' || !cobranca || cobranca.status !== 'pendente') return
+    if (!ETAPA_DA_TELA[stage ?? ''] || !cobranca || cobranca.status !== 'pendente') return
     const id = window.setInterval(async () => {
       try {
-        const atual = await buscarCobranca()
+        const atual = await buscarCobranca(etapaDaCobranca)
         if (!atual.existe) return
-        if (atual.status === 'confirmado') { registrarVenda(atual.id, atual.valorCentavos); go('confirmado'); return }
+        if (atual.status === 'confirmado') { registrarVenda(atual.id, atual.valorCentavos); go(telaDeSucesso); return }
         if (atual.status !== cobranca.status) setCobranca(atual)
       } catch { /* rede instável: a próxima rodada tenta de novo */ }
     }, INTERVALO_POLLING)
     return () => window.clearInterval(id)
-  }, [stage, cobranca, go])
+  }, [stage, cobranca, go, etapaDaCobranca, telaDeSucesso, registrarVenda])
 
   const expiraEm = cobranca ? new Date(cobranca.criadoEm).getTime() + cobranca.minutosParaExpirar * 60_000 : 0
   const restante = cobranca && agora ? Math.max(0, Math.floor((expiraEm - agora) / 1000)) : null
@@ -236,7 +250,7 @@ export function EnrollmentFlow() {
     // Voltando ao PIX: reaproveita a cobrança pendente, se ainda houver.
     if (cobranca?.metodo === 'pix' && cobranca.status === 'pendente') return
     setCobranca(null)
-    try { setCobranca(await criarCobranca({ metodo: 'pix' })) }
+    try { setCobranca(await criarCobranca({ metodo: 'pix', etapa: etapaDaCobranca })) }
     catch (e) { setErroGeral(e instanceof ErroDaApi ? e.message : 'Não foi possível abrir a cobrança.') }
   }
 
@@ -245,15 +259,15 @@ export function EnrollmentFlow() {
     // No cartão, "tentar de novo" é voltar ao formulário — sem os dados não
     // há o que recriar.
     if (metodo === 'cartao') return
-    try { setCobranca(await criarCobranca({ metodo: 'pix' })) }
+    try { setCobranca(await criarCobranca({ metodo: 'pix', etapa: etapaDaCobranca })) }
     catch (e) { setErroGeral(e instanceof ErroDaApi ? e.message : 'Não foi possível gerar novo código.') }
   }
 
   /** Confirma a cobrança e leva para a etapa seguinte. */
   const aprovar = useCallback(async (pagamentoId: string, valorCentavos: number) => {
-    try { await confirmarCobranca(pagamentoId); registrarVenda(pagamentoId, valorCentavos); go('confirmado') }
+    try { await confirmarCobranca(pagamentoId); registrarVenda(pagamentoId, valorCentavos); go(telaDeSucesso) }
     catch (e) { setErroGeral(e instanceof ErroDaApi ? e.message : 'Não foi possível confirmar o pagamento.') }
-  }, [go])
+  }, [go, registrarVenda, telaDeSucesso])
 
   const copyPix = async () => {
     if (!cobranca?.pixCopiaCola) return
@@ -276,6 +290,7 @@ export function EnrollmentFlow() {
     try {
       const nova = await criarCobranca({
         metodo: 'cartao',
+        etapa: etapaDaCobranca,
         parcelas: cartao.parcelas,
         cartao: {
           numero: digits(cartao.numero),
@@ -287,7 +302,7 @@ export function EnrollmentFlow() {
       setCobranca(nova)
       // O cartão costuma ter desfecho imediato. Sem isto, uma cobrança
       // aprovada de verdade ficava parada na tela de pagamento.
-      if (nova.status === 'confirmado') { registrarVenda(nova.id, nova.valorCentavos); go('confirmado'); return }
+      if (nova.status === 'confirmado') { registrarVenda(nova.id, nova.valorCentavos); go(telaDeSucesso); return }
       if (nova.simulacao) await aprovar(nova.id, nova.valorCentavos)
     } catch (e) {
       setErroGeral(e instanceof ErroDaApi ? e.message : 'Não foi possível processar o cartão.')
@@ -313,11 +328,11 @@ export function EnrollmentFlow() {
             <h1 id="course-title">Fluxo de inscrição</h1>
             <p className="lede">Ambiente de demonstração do checkout e da triagem do Curso de Punção Venosa. Pronto para ser ligado ao CTA da página de vendas.</p>
             <div className="course-meta"><span>8h presenciais</span><span>Sede CVB-RJ</span><span>PIX ou cartão</span></div>
-            <button className="primary-button" onClick={() => go('dados')}>Abrir inscrição · {formatarBRL(PRECO_CENTAVOS)}</button>
+            <button className="primary-button" onClick={() => go('dados')}>Abrir inscrição · matrícula {formatarBRL(PRECO_MATRICULA_CENTAVOS)}</button>
           </section>
         </div>
       </main>
-      {!open && <div className="mobile-cta"><span>{formatarBRL(PRECO_CENTAVOS)} · PIX ou cartão</span><button className="primary-button" onClick={() => go('dados')}>Garantir minha vaga</button></div>}
+      {!open && <div className="mobile-cta"><span>Matrícula {formatarBRL(PRECO_MATRICULA_CENTAVOS)} · PIX ou cartão</span><button className="primary-button" onClick={() => go('dados')}>Garantir minha vaga</button></div>}
       {open && <>
         <button className="overlay" onClick={close} aria-label="Fechar inscrição" />
         <section className="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title"
@@ -327,11 +342,13 @@ export function EnrollmentFlow() {
           <ClinicalHeader step={stage === 'dados' ? 1 : stage === 'pagamento' ? 2 : 3} />
           <button className="icon-button sheet-close" onClick={close} aria-label="Fechar"><X /></button>
           {stage === 'dados' && <DataStage data={data} errors={errors} cadastro={cadastro} enviando={enviando} erroGeral={erroGeral} update={update} blur={blur} submit={submitData} />}
-          {stage === 'pagamento' && <PaymentStage
+          {(stage === 'pagamento' || stage === 'curso') && <PaymentStage
+            etapa={etapaDaCobranca}
             metodo={metodo} cobranca={cobranca} copied={copied} restante={restante} enviando={enviando} erroGeral={erroGeral}
             cartao={cartao} setCartao={setCartao}
             trocarMetodo={trocarMetodo} copyPix={copyPix} gerarNovoCodigo={gerarNovoCodigo} pagarComCartao={pagarComCartao} simular={simular} />}
           {stage === 'confirmado' && <ConfirmationStage />}
+          {stage === 'curso-pago' && <CourseSettledStage />}
         </section>
       </>}
     </>
@@ -369,7 +386,7 @@ function DataStage({ data, errors, cadastro, enviando, erroGeral, update, blur, 
       {erroGeral && <p className="error" role="alert">{erroGeral}</p>}
     </div>
     <footer className="sheet-footer">
-      <div className="price-summary"><small>Total à vista</small><strong>{formatarBRL(PRECO_CENTAVOS)}</strong></div>
+      <div className="price-summary"><small>Matrícula hoje</small><strong>{formatarBRL(PRECO_MATRICULA_CENTAVOS)}</strong></div>
       <button className="primary-button" onClick={submit} disabled={enviando}>{enviando ? <><Loader2 className="spin" /> Salvando…</> : 'Ir para o pagamento'}</button>
     </footer>
   </>
@@ -394,7 +411,8 @@ function LegalNote() {
   </p>
 }
 
-function PaymentStage({ metodo, cobranca, copied, restante, enviando, erroGeral, cartao, setCartao, trocarMetodo, copyPix, gerarNovoCodigo, pagarComCartao, simular }: {
+function PaymentStage({ etapa, metodo, cobranca, copied, restante, enviando, erroGeral, cartao, setCartao, trocarMetodo, copyPix, gerarNovoCodigo, pagarComCartao, simular }: {
+  etapa: EtapaDeCobranca
   metodo: PagamentoMetodo; cobranca: Cobranca | null; copied: boolean; restante: number | null
   enviando: boolean; erroGeral: string
   cartao: DadosCartao; setCartao: (atualizar: (anterior: DadosCartao) => DadosCartao) => void
@@ -404,11 +422,18 @@ function PaymentStage({ metodo, cobranca, copied, restante, enviando, erroGeral,
   const timer = restante === null ? '--:--'
     : `${String(Math.floor(restante / 60)).padStart(2, '0')}:${String(restante % 60).padStart(2, '0')}`
 
+  // O valor da cobrança gravada manda; a constante do build é só o que
+  // mostrar enquanto ela não chegou.
+  const valor = cobranca?.valorCentavos ?? COBRANCAS[etapa].centavos
+
   return <div className="sheet-scroll">
-    <h2 id="sheet-title">Pagamento</h2>
-    <p className="payment-value">{formatarBRL(PRECO_CENTAVOS)}</p>
+    <h2 id="sheet-title">{etapa === 'curso' ? 'Pagar o curso' : 'Matrícula'}</h2>
+    <p className="payment-value">{formatarBRL(valor)}</p>
+    {etapa === 'matricula' && COBRA_CURSO_A_PARTE
+      ? <p className="payment-lede">Este é o valor da matrícula, que garante sua vaga. O curso ({formatarBRL(PRECO_CURSO_CENTAVOS)}) você paga até o dia da aula.</p>
+      : <p className="payment-lede">Saldo do curso. Com ele pago, sua inscrição fica quitada.</p>}
     <p className="receiver">Recebedor: Cruz Vermelha Brasileira — Filial RJ</p>
-    <PriceBreakdown itens={cobranca?.itens ?? undefined} total={cobranca?.valorCentavos} />
+    <PriceBreakdown etapa={etapa} itens={cobranca?.itens ?? undefined} total={cobranca?.valorCentavos} />
     <LegalNote />
 
     <div className="method-tabs" role="tablist" aria-label="Meio de pagamento">
@@ -438,7 +463,7 @@ function PaymentStage({ metodo, cobranca, copied, restante, enviando, erroGeral,
           : <p className="timer">Este código vale por 24 horas. Você pode pagar agora ou mais tarde.</p>}
         <div className="payment-status"><span className="pulse" /><span>Aguardando confirmação do pagamento…</span></div>
       </>
-      : metodo === 'cartao' ? <CardForm enviando={enviando} cartao={cartao} setCartao={setCartao} onSubmit={pagarComCartao} />
+      : metodo === 'cartao' ? <CardForm enviando={enviando} cartao={cartao} setCartao={setCartao} onSubmit={pagarComCartao} valorCentavos={valor} />
       : null}
 
     {cobranca?.confirmacaoManual && <div className="dev-tools">
@@ -450,7 +475,20 @@ function PaymentStage({ metodo, cobranca, copied, restante, enviando, erroGeral,
   </div>
 }
 
+/**
+ * Matrícula paga: a vaga está garantida e a triagem, aberta.
+ *
+ * O saldo do curso aparece aqui, e não só na ficha, porque este é o único
+ * momento em que temos certeza de que o aluno está lendo. Descobrir que
+ * ainda há R$ 150 no dia da aula seria a pior hora possível.
+ */
 function ConfirmationStage() {
   const router = useRouter()
-  return <div className="sheet-scroll confirmation"><RedCross /><h2 id="sheet-title">Vaga garantida.</h2><p>Pagamento de {formatarBRL(PRECO_CENTAVOS)} confirmado. Falta só um passo.</p><p>Suas respostas definem a melhor data para a sua turma.</p><button className="primary-button full" onClick={() => router.push('/triagem/1')}>Responder 8 perguntas rápidas</button><button className="text-button" onClick={() => router.push('/minha-inscricao')}>Responder depois</button></div>
+  return <div className="sheet-scroll confirmation"><RedCross /><h2 id="sheet-title">Vaga garantida.</h2><p>Matrícula de {formatarBRL(PRECO_MATRICULA_CENTAVOS)} confirmada. Falta só um passo.</p><p>Suas respostas definem a melhor data para a sua turma.</p><button className="primary-button full" onClick={() => router.push('/triagem/1')}>Responder 8 perguntas rápidas</button><button className="text-button" onClick={() => router.push('/minha-inscricao')}>Responder depois</button>{COBRA_CURSO_A_PARTE && <p className="confirmation-saldo">Falta o curso: {formatarBRL(PRECO_CURSO_CENTAVOS)}, que você paga até o dia da aula. O código fica guardado na sua ficha de inscrição.</p>}</div>
+}
+
+/** Saldo do curso pago — a inscrição não deve mais nada. */
+function CourseSettledStage() {
+  const router = useRouter()
+  return <div className="sheet-scroll confirmation"><RedCross /><h2 id="sheet-title">Curso pago.</h2><p>Sua inscrição está quitada. Nada mais a pagar até o dia da aula.</p><button className="primary-button full" onClick={() => router.push('/minha-inscricao')}>Ver minha inscrição</button></div>
 }
