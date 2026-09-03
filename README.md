@@ -159,6 +159,16 @@ O preço não é editado no código de propósito: um valor trocado à mão é f
 
 As rotas de pagamento declaram `maxDuration = 60`. A criação de cobrança no cartão leva cerca de 11 segundos na Únicopag, e o limite padrão de uma função na Vercel é 10 — sem isso, o aluno receberia erro numa cobrança possivelmente criada.
 
+### Onde vai o tempo da geração do PIX
+
+`POST /api/pagamentos` grava no log da Vercel uma linha por cobrança, com a duração de cada fase:
+
+```
+[funil] pagamentos: matricula/pix criada · banco 180ms · Únicopag 9400ms · gravação 90ms · total 9700ms
+```
+
+É a medida a consultar antes de mexer em qualquer coisa. O que se sabe até aqui, medido em produção: a função já roda em São Paulo (`gru1`, confirmado pelo cabeçalho `x-vercel-id`, que sai como `iad1::gru1::…`); o Supabase responde cada leitura em ~100 ms; a Únicopag responde o `GET /public/v1/balance` em menos de 1 s, mas o `POST /public/v1/payments` de um PIX leva entre 9 e 22 s. Ou seja: do nosso lado sobra menos de 1 s por cobrança, e o restante é o provedor. Três coisas foram feitas para encolher a parte que é nossa: as três leituras que antecedem a chamada ao provedor vão juntas (`Promise.all`); a tela de pagamento abre no próprio clique de "Ir para o pagamento", com cadastro e cobrança encadeados por trás — antes, o botão ficava em "Salvando…" até o cadastro responder e só então a Únicopag era chamada; e, o que mais pesa, **cadastro e cobrança começam assim que o formulário fica válido, antes do toque no botão**. O tempo que a pessoa passa entre o último campo e o botão (lendo o quadro de preço, o aviso legal) vira a espera da Únicopag, e no clique o código quase sempre já está pronto. As regras dessa cadeia (uma por conjunto de dados, em série e nunca em paralelo, apagada em falha, nunca disparada com campo de texto focado) estão em `components/enrollment-flow.tsx` e no `CLAUDE.md`. Consequência assumida: inscrição, e-mail "cobrança aberta", webhook e público de remarketing passam a existir também para quem completou o formulário e não clicou — no painel, "preencheu os dados" inclui essas pessoas.
+
 ## Publicando na Vercel
 
 1. Em vercel.com, **Add New → Project** e importar `puncaovenosa-fullautomatic`.
@@ -167,7 +177,7 @@ As rotas de pagamento declaram `maxDuration = 60`. A criação de cobrança no c
 4. Para conseguir percorrer o funil sem provedor de pagamento, adicionar `SIMULAR_PAGAMENTO` com valor `true`. **Remova essa variável antes de receber aluno de verdade.**
 5. Deploy. Cada push na `main` gera um novo deploy, e cada pull request ganha uma URL de preview própria.
 
-`vercel.json` fixa a função em `gru1` (São Paulo) — sem isso, a região padrão da Vercel costuma ficar nos EUA, e cada chamada à Únicopag e ao Supabase (ambos no Brasil) paga travessia transatlântica de ida e volta. É a razão mais provável de uma cobrança PIX levar vários segundos a mais do que devia. **`regions` em `vercel.json` só tem efeito no plano Pro** — no Hobby, a Vercel ignora essa configuração e mantém a região padrão dela; o arquivo fica pronto para quando (ou se) o projeto migrar de plano.
+`vercel.json` fixa a função em `gru1` (São Paulo) — sem isso, a região padrão da Vercel costuma ficar nos EUA, e cada chamada à Únicopag e ao Supabase (ambos no Brasil) paga travessia transatlântica de ida e volta. Em produção a função **está** em `gru1`: o cabeçalho `x-vercel-id` das respostas sai como `iad1::gru1::…` (o primeiro trecho é a borda que recebeu a requisição; o segundo, onde a função rodou). Se um dia esse segundo trecho voltar a ser `iad1`, a região foi perdida — no plano Hobby ela também pode ser conferida em **Settings → Functions → Function Region** do projeto.
 
 ### Diagnóstico
 

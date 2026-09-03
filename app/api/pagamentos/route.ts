@@ -68,13 +68,61 @@ export function POST(request: Request) {
       return erro('O curso não é cobrado à parte com o preço em vigor.', 422)
     }
     const aCobrar = COBRANCAS[etapa]
+    const simulando = simulacaoAtiva()
 
+    // Cronômetro por fase. A geração do PIX é a espera mais longa do funil,
+    // e sem este registro não dá para saber, num aluno real, quanto foi
+    // banco, quanto foi a Únicopag e quanto foi a gravação — só durações,
+    // nunca dado do aluno.
+    const inicio = Date.now()
+    const decorrido = () => Date.now() - inicio
+
+    // As três leituras não dependem uma da outra, então vão juntas: em série
+    // eram três idas ao banco antes de a Únicopag sequer ser chamada, e cada
+    // uma entra inteira no tempo que o aluno espera olhando para o "gerando".
+    //
+    // Cobrança PIX aberta é reaproveitada, não recriada: a chamada à Únicopag
+    // é o trecho lento do checkout, e o código antigo continua pagável no
+    // provedor. É também o que permite ao navegador disparar a criação já no
+    // clique do cadastro, sem medo de duplicar. A janela fica aquém da
+    // validade real (24h na Únicopag, 30 min na simulação) para nunca
+    // entregar um código que o app do banco vai recusar. Reaproveitar não
+    // redispara webhook nem evento do Meta — ambos são de transição, e a
+    // transição aconteceu quando a cobrança nasceu.
     const supabase = supabaseServer()
-    const { data: inscricao, error: erroInscricao } = await supabase
-      .from('inscricoes')
-      .select('id, nome, cpf, telefone, email')
-      .eq('id', inscricaoId)
-      .maybeSingle()
+    const validaDesde = new Date(Date.now() - (simulando ? MINUTOS_PARA_EXPIRAR * 60_000 : 20 * 3_600_000)).toISOString()
+    const [
+      { data: inscricao, error: erroInscricao },
+      { data: confirmadas, error: erroConfirmadas },
+      { data: aberta },
+    ] = await Promise.all([
+      supabase
+        .from('inscricoes')
+        .select('id, nome, cpf, telefone, email')
+        .eq('id', inscricaoId)
+        .maybeSingle(),
+      supabase
+        .from('pagamentos')
+        .select('etapa')
+        .eq('inscricao_id', inscricaoId)
+        .eq('status', 'confirmado'),
+      metodo === 'pix'
+        ? supabase
+          .from('pagamentos')
+          .select('id, metodo, etapa, parcelas, valor_centavos, itens, status, pix_copia_cola, criado_em')
+          .eq('inscricao_id', inscricaoId)
+          .eq('metodo', 'pix')
+          .eq('etapa', etapa)
+          .eq('status', 'pendente')
+          .eq('valor_centavos', aCobrar.centavos)
+          .not('pix_copia_cola', 'is', null)
+          .gte('criado_em', validaDesde)
+          .order('criado_em', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+        : Promise.resolve({ data: null }),
+    ])
+    const msBanco = decorrido()
 
     if (erroInscricao) {
       console.error('[funil] leitura da inscrição falhou:', erroInscricao)
@@ -86,12 +134,6 @@ export function POST(request: Request) {
     // depois da vaga garantida. É aqui que essa garantia mora: o banco não
     // tem restrição de unicidade entre as confirmadas de propósito (ver a
     // migration 0014), justamente para nunca recusar dinheiro que entrou.
-    const { data: confirmadas, error: erroConfirmadas } = await supabase
-      .from('pagamentos')
-      .select('etapa')
-      .eq('inscricao_id', inscricaoId)
-      .eq('status', 'confirmado')
-
     if (erroConfirmadas) {
       console.error('[funil] leitura das cobranças confirmadas falhou:', erroConfirmadas)
       return erro('Não foi possível abrir a cobrança.', 502)
@@ -107,32 +149,9 @@ export function POST(request: Request) {
       return erro('A matrícula precisa estar paga antes do curso.', 409)
     }
 
-    const simulando = simulacaoAtiva()
-
-    // Cobrança PIX aberta é reaproveitada, não recriada: a chamada à Únicopag
-    // é o trecho lento do checkout, e o código antigo continua pagável no
-    // provedor. É também o que permite ao navegador disparar a criação já no
-    // envio do cadastro, sem medo de duplicar. A janela fica aquém da validade
-    // real (24h na Únicopag, 30 min na simulação) para nunca entregar um
-    // código que o app do banco vai recusar. Reaproveitar não redispara
-    // webhook nem evento do Meta — ambos são de transição, e a transição
-    // aconteceu quando a cobrança nasceu.
     if (metodo === 'pix') {
-      const validaDesde = new Date(Date.now() - (simulando ? MINUTOS_PARA_EXPIRAR * 60_000 : 20 * 3_600_000)).toISOString()
-      const { data: aberta } = await supabase
-        .from('pagamentos')
-        .select('id, metodo, etapa, parcelas, valor_centavos, itens, status, pix_copia_cola, criado_em')
-        .eq('inscricao_id', inscricaoId)
-        .eq('metodo', 'pix')
-        .eq('etapa', etapa)
-        .eq('status', 'pendente')
-        .eq('valor_centavos', aCobrar.centavos)
-        .not('pix_copia_cola', 'is', null)
-        .gte('criado_em', validaDesde)
-        .order('criado_em', { ascending: false })
-        .limit(1)
-        .maybeSingle()
       if (aberta) {
+        console.info(`[funil] pagamentos: ${etapa}/pix reaproveitada · banco ${msBanco}ms · total ${decorrido()}ms`)
         return NextResponse.json({
           id: aberta.id,
           metodo: aberta.metodo,
@@ -156,6 +175,7 @@ export function POST(request: Request) {
     let pixCopiaCola: string | null = null
     let bandeira: string | null = null
     let statusInicial: string = 'pendente'
+    let msProvedor = 0
 
     if (simulando) {
       pixCopiaCola = metodo === 'pix'
@@ -213,6 +233,7 @@ export function POST(request: Request) {
           : {}),
       }
 
+      const antesDoProvedor = Date.now()
       try {
         const cobranca = await criarPagamento(payload)
         provedorId = cobranca.hash
@@ -223,13 +244,16 @@ export function POST(request: Request) {
         if (e instanceof UnicopagErro) {
           // A mensagem do provedor é útil ao aluno ("cartão recusado"), mas o
           // payload não pode aparecer em log: carrega o número do cartão.
-          console.error('[funil] Únicopag recusou a cobrança:', e.status, e.message)
+          console.error('[funil] Únicopag recusou a cobrança:', e.status, e.message,
+            `· após ${Date.now() - antesDoProvedor}ms`)
           return erro(e.mensagemParaOAluno, e.status === 422 ? 422 : 502)
         }
         throw e
       }
+      msProvedor = Date.now() - antesDoProvedor
     }
 
+    const antesDeGravar = Date.now()
     const { data, error } = await supabase
       .from('pagamentos')
       .insert({
@@ -254,6 +278,7 @@ export function POST(request: Request) {
       console.error('[funil] gravação do pagamento falhou:', error)
       return erro('Não foi possível registrar a cobrança. Tente novamente.', 502)
     }
+    console.info(`[funil] pagamentos: ${etapa}/${metodo} criada · banco ${msBanco}ms · ${simulando ? 'simulação' : `Únicopag ${msProvedor}ms`} · gravação ${Date.now() - antesDeGravar}ms · total ${decorrido()}ms`)
 
     notificarSecretaria(inscricaoId, 'pagamento_iniciado')
     // Só o PIX, e só com código: no cartão o desfecho é imediato, e uma
