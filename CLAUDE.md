@@ -49,6 +49,8 @@ Use **pnpm**, nunca npm ou yarn — o lockfile é do pnpm e o CI roda com `--fro
 
 ## Armadilhas
 
+- **O banco é o projeto Supabase da redação** (`RedacaoCruzVermelha-Rj`, ref `wlbbfkudeibalkaqphpo`, `ca-central-1`), schema `public`, dividido com as tabelas da redação (`pautas`, `content_pieces`, `newsletter_inscritos`…). Nome novo de tabela, função, tipo ou sequence precisa ser conferido contra o que a redação já tem antes de virar migration — colisão ali quebra os dois sistemas. Nunca use `grant/revoke ... on all tables in schema public`: pega as tabelas da redação junto; liste as do funil uma a uma, como a migration `0016` faz. `anon`/`authenticated` não têm privilégio nenhum sobre o que é do funil (a chave publicável da redação está no navegador de quem visita o site dela), e o `service_role` tem os dele concedidos explicitamente — objeto novo do funil precisa repetir esses dois lados. O projeto antigo (`lqpnbqislaxzhqkszijg`) é arquivo, não destino de migration nova. Ver "Onde o banco mora" no README, inclusive o custo de latência assumido por o projeto estar no Canadá.
+
 - `next.config.mjs` tem `typescript.ignoreBuildErrors: true` — `pnpm build` passa mesmo com erro de tipo. Rode `pnpm typecheck` sempre; hoje ele passa limpo.
 - A triagem tem exatamente 8 passos, validados em `app/triagem/[step]/page.tsx` e usados no cálculo da barra de progresso (`step * 12.5`). Mudar a quantidade de perguntas exige mexer nos dois lugares.
 - O back-end é Postgres no Supabase. O `localStorage` sobrou como cache do rascunho — a fonte da verdade é o servidor. Componentes que leem estado usam `useEffect` para evitar mismatch de hidratação; mantenha esse padrão.
