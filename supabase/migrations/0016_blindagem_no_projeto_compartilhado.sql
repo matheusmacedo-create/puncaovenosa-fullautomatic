@@ -1,5 +1,6 @@
--- O funil passou a morar no projeto Supabase da redação (RedacaoCruzVermelha-Rj,
--- ref wlbbfkudeibalkaqphpo), no mesmo schema `public` das tabelas dela.
+-- O projeto Supabase do funil (puncaovenosa-fullautomatic, ref lqpnbqislaxzhqkszijg,
+-- sa-east-1) passou a hospedar também a redação (RedacaoCruzVermelha-Rj), no
+-- mesmo schema `public`.
 --
 -- Até aqui a proteção era só a RLS forçada sem policy: a chave publicável
 -- não enxerga linha nenhuma. Continua valendo. Mas num projeto compartilhado
@@ -10,9 +11,10 @@
 -- barraria a escrita, mas não há por que deixar a porta encostada.
 --
 -- Esta migration tira anon/authenticated de tudo que é do funil e dá ao
--- service_role, explicitamente, o que o servidor precisa. É idempotente e
--- vale também para o projeto antigo (lqpnbqislaxzhqkszijg), onde já foi
--- aplicada.
+-- service_role, explicitamente, o que o servidor precisa. É idempotente.
+-- Chegou a ser aplicada também no projeto da redação no Canadá
+-- (wlbbfkudeibalkaqphpo), enquanto a consolidação apontava para lá; aquele
+-- projeto é arquivo, e os objetos do funil já foram removidos de lá.
 
 revoke all on table
   public.inscricoes, public.pagamentos, public.triagem_respostas, public.validacoes,
