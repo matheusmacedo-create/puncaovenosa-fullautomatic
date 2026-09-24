@@ -1,19 +1,9 @@
 import { registrarVisita } from '@/lib/api-cliente'
 import { rastrear } from '@/lib/rastreio'
+import { origemDaUrl } from '@/lib/atribuicao'
 
 export type CtaPosition = 'hero' | 'content' | 'offer' | 'sticky' | 'final'
 
-const TRACKED_PARAMS = [
-  'utm_source',
-  'utm_medium',
-  'utm_campaign',
-  'utm_content',
-  'utm_term',
-  'utm_id',
-  'fbclid',
-  'ttclid',
-  'gclid',
-]
 
 export type Atribuicao = {
   utmSource?: string
@@ -43,14 +33,7 @@ export function atribuicaoAtual(): Atribuicao {
 
 /** UTMs presentes na URL atual, repassadas aos eventos e ao checkout. */
 export function currentUtms(): Record<string, string> {
-  if (typeof window === 'undefined') return {}
-  const params = new URLSearchParams(window.location.search)
-  const utms: Record<string, string> = {}
-  for (const key of TRACKED_PARAMS) {
-    const value = params.get(key)
-    if (value) utms[key] = value
-  }
-  return utms
+  return origemDaUrl()
 }
 
 /** Eventos que não são etapa do funil continuam só no dataLayer. */
