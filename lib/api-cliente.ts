@@ -2,6 +2,7 @@
 
 import type { Endereco } from '@/lib/cep'
 import type { Atribuicao } from '@/lib/checkout'
+import { utmsDaCobranca } from '@/lib/atribuicao'
 import { EnrollmentData, EtapaDeCobranca, PagamentoMetodo, PagamentoStatus } from '@/lib/enrollment'
 
 /**
@@ -98,7 +99,10 @@ export const criarCobranca = (payload: {
   etapa?: EtapaDeCobranca
   parcelas?: number
   cartao?: { numero: string; nome: string; validade: string; cvv: string }
-}) => pedir<Cobranca>('/api/pagamentos', { method: 'POST', body: JSON.stringify(payload) })
+}) =>
+  // As UTMs da URL vão junto: o servidor as repassa à Únicopag, e é por elas
+  // que a receita aparece por campanha e por advertorial no sistema da escola.
+  pedir<Cobranca>('/api/pagamentos', { method: 'POST', body: JSON.stringify({ ...payload, atribuicao: utmsDaCobranca() }) })
 
 export const buscarCobranca = (etapa: EtapaDeCobranca = 'matricula') =>
   pedir<Cobranca & { existe: boolean }>(`/api/pagamentos/atual?etapa=${etapa}`)

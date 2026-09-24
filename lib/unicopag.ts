@@ -76,6 +76,8 @@ export type NovoPagamento = {
   expire_in_days?: number
   origin?: string
   metadata?: Record<string, unknown>
+  /** Origem da venda (documentação: tracking.src/utm_*). Volta na transação como utm_source, utm_campaign, utm_content… */
+  tracking?: { src?: string; utm_source?: string; utm_medium?: string; utm_campaign?: string; utm_content?: string; utm_term?: string }
 }
 
 export type RespostaDePagamento = {

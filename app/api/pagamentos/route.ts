@@ -26,7 +26,11 @@ export const maxDuration = 60
 
 
 type Cartao = { numero?: string; nome?: string; validade?: string; cvv?: string }
-type Payload = { metodo?: 'pix' | 'cartao'; parcelas?: number; cartao?: Cartao; etapa?: string }
+type Utms = { utmSource?: unknown; utmMedium?: unknown; utmCampaign?: unknown; utmContent?: unknown; utmTerm?: unknown }
+type Payload = { metodo?: 'pix' | 'cartao'; parcelas?: number; cartao?: Cartao; etapa?: string; atribuicao?: Utms }
+
+/** Rótulo de relatório vindo da URL: só corta o tamanho (o mesmo critério de /api/inscricoes). */
+const rotulo = (valor: unknown) => (typeof valor === 'string' ? valor.trim().slice(0, 120) : '') || undefined
 
 /** Dias que a cobrança PIX aceita pagamento no provedor. O contador de 30 min da tela é da interface. */
 const DIAS_PARA_EXPIRAR = 1
@@ -98,7 +102,7 @@ export function POST(request: Request) {
     ] = await Promise.all([
       supabase
         .from('inscricoes')
-        .select('id, nome, cpf, telefone, email')
+        .select('id, nome, cpf, telefone, email, utm_source, utm_medium, utm_campaign')
         .eq('id', inscricaoId)
         .maybeSingle(),
       supabase
@@ -190,6 +194,17 @@ export function POST(request: Request) {
         if (faltando.length) return erro('Preencha todos os dados do cartão.', 422)
       }
 
+      // Fonte, meio e campanha são de PRIMEIRO toque (o que a inscrição
+      // gravou, a mesma regra do painel); a página que trouxe a pessoa agora
+      // (utm_content, ex.: um advertorial) e o termo vêm da URL da cobrança.
+      const atual = body.atribuicao ?? {}
+      const origem = {
+        utm_source: rotulo(inscricao.utm_source) ?? rotulo(atual.utmSource),
+        utm_medium: rotulo(inscricao.utm_medium) ?? rotulo(atual.utmMedium),
+        utm_campaign: rotulo(inscricao.utm_campaign) ?? rotulo(atual.utmCampaign),
+        utm_content: rotulo(atual.utmContent),
+        utm_term: rotulo(atual.utmTerm),
+      }
       const validade = digits(cartao?.validade ?? '')
       const payload: NovoPagamento = {
         amount: aCobrar.centavos,
@@ -219,7 +234,11 @@ export function POST(request: Request) {
         // Reforça no dashboard da Únicopag quem comprou e o quê, além do que
         // já vai em `customer` e em `cart` — `metadata` é onde o painel deles
         // costuma mostrar informação extra sobre a transação.
-        metadata: { inscricao_id: inscricaoId, referencia: txid, curso: courseData.courseName, aluno: inscricao.nome, etapa },
+        metadata: { inscricao_id: inscricaoId, referencia: txid, curso: courseData.courseName, aluno: inscricao.nome, etapa, ...Object.fromEntries(Object.entries(origem).filter(([, v]) => v)) },
+        // A origem da venda volta na transação (utm_source, utm_campaign,
+        // utm_content…) e é o que a Redação — o sistema administrativo da
+        // escola — usa para somar a receita por campanha e por advertorial.
+        tracking: { src: 'funil-puncao-venosa', ...Object.fromEntries(Object.entries(origem).filter(([k, v]) => v && k !== 'utm_medium')) },
         ...(metodo === 'cartao' && cartao
           ? {
               card: {
