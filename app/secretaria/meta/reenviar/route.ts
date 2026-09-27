@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { NOME_PARA_ETAPA } from '@/lib/etapas-funil'
-import { ETAPAS_COM_CAPI, reenviarConversaoMeta } from '@/lib/meta-capi'
+import { ETAPAS_COM_CAPI, reenviarConversaoMeta, SemConsentimentoDeMarketing } from '@/lib/meta-capi'
 import { secretariaAutenticada, secretariaHabilitada } from '@/lib/secretaria'
 
 /**
@@ -27,6 +27,12 @@ export async function POST(request: Request) {
   try {
     await reenviarConversaoMeta(inscricaoId, etapa, typeof pagamentoId === 'string' && pagamentoId ? pagamentoId : undefined)
   } catch (e) {
+    // Sem consentimento de marketing gravado não é falha: é a regra (LGPD).
+    // O painel diz isso com todas as letras, para ninguém insistir no botão.
+    if (e instanceof SemConsentimentoDeMarketing) {
+      destino.searchParams.set('erroMeta', 'consentimento')
+      return NextResponse.redirect(destino, { status: 303 })
+    }
     console.error('[secretaria] reenvio manual à Meta CAPI falhou:', e)
     destino.searchParams.set('erroMeta', '1')
     return NextResponse.redirect(destino, { status: 303 })

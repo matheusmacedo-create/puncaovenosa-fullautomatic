@@ -1,4 +1,5 @@
 import { RedCross } from '@/components/clinical-header'
+import { LinksLegais } from '@/components/links-legais'
 import { supabaseServer } from '@/lib/supabase/server'
 
 /**
@@ -94,5 +95,6 @@ function Moldura({ children }: { children: React.ReactNode }) {
       Confira o nome e o CPF com um documento com foto. O horário acima é o desta leitura —
       se estiver defasado, você está vendo uma captura de tela, não uma conferência real.
     </p>
+    <LinksLegais />
   </main>
 }

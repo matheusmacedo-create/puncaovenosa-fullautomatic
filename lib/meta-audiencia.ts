@@ -16,7 +16,15 @@ import { supabaseServer } from '@/lib/supabase/server'
  * - `removerDoPublicoDeAbandono` roda em tempo real, chamada do mesmo lugar
  *   onde já disparamos o evento `pago` da Conversions API — sem isso,
  *   continuaríamos pagando anúncio de remarketing para quem já comprou até
- *   a próxima rodada do cron, até 24h depois.
+ *   a próxima rodada do cron, até 24h depois. Também sai do público, na
+ *   hora, quem tira a permissão de marketing no aviso de cookies
+ *   (POST /api/consentimento).
+ *
+ * Só entra no público quem tem consentimento de marketing gravado na
+ * inscrição (`consentimento_marketing`, migration 0016): e-mail e telefone,
+ * mesmo com hash, vão para o Meta para mostrar anúncio à pessoa — é marketing,
+ * e marketing depende do "sim" dela. Sem a coluna (migration não aplicada), a
+ * consulta falha e ninguém é adicionado.
  *
  * Nunca lança: o Meta fora do ar não pode derrubar a confirmação de
  * pagamento nem a criação da inscrição.
@@ -102,6 +110,7 @@ export async function sincronizarAbandonados() {
     .from('inscricoes')
     .select('id, email, telefone')
     .in('status', ['rascunho', 'aguardando_pagamento'])
+    .eq('consentimento_marketing', true)
     .lt('criado_em', new Date(Date.now() - JANELA_DE_ABANDONO_HORAS * 60 * 60 * 1000).toISOString())
 
   if (error) {
@@ -183,29 +192,41 @@ export function removerDoPublicoDeAbandono(inscricaoId: string) {
 }
 
 /**
- * Rede de segurança da rotina diária: alguém que já pagou mas cuja remoção
- * em tempo real falhou (Meta fora do ar no momento da confirmação) fica
- * pendurado no público para sempre sem isto — aqui ele é varrido de novo.
+ * Rede de segurança da rotina diária: alguém que já pagou, ou que tirou a
+ * permissão de marketing, mas cuja remoção em tempo real falhou (Meta fora do
+ * ar naquele momento) fica pendurado no público para sempre sem isto — aqui
+ * ele é varrido de novo.
+ *
+ * Duas consultas, e não uma: sem a migration 0016 aplicada, a de quem tirou a
+ * permissão falha sozinha e a de quem pagou continua valendo.
  */
 export async function retentarRemocoesPendentes() {
   if (!audienciaConfigurada()) return { removidos: 0 }
   const supabase = supabaseServer()
 
-  const { data: pendentes, error } = await supabase
-    .from('meta_publico_membros')
-    .select('id, inscricao_id, inscricoes!inner(status, email, telefone)')
-    .is('removido_em', null)
-    .in('inscricoes.status', ['paga', 'triagem_concluida'])
+  const [pagos, semPermissao] = await Promise.all([
+    supabase
+      .from('meta_publico_membros')
+      .select('id, inscricao_id, inscricoes!inner(email, telefone)')
+      .is('removido_em', null)
+      .in('inscricoes.status', ['paga', 'triagem_concluida']),
+    supabase
+      .from('meta_publico_membros')
+      .select('id, inscricao_id, inscricoes!inner(email, telefone)')
+      .is('removido_em', null)
+      .eq('inscricoes.consentimento_marketing', false),
+  ])
 
-  if (error) {
-    console.error('[meta-audiencia] falha ao buscar remoções pendentes:', error)
-    return { removidos: 0 }
-  }
-  if (!pendentes?.length) return { removidos: 0 }
+  if (pagos.error) console.error('[meta-audiencia] falha ao buscar remoções pendentes de quem pagou:', pagos.error)
+  if (semPermissao.error) console.error('[meta-audiencia] falha ao buscar quem tirou a permissão de marketing (migration 0016 aplicada?):', semPermissao.error)
 
-  for (const p of pendentes) {
+  // Quem pagou e também tirou a permissão aparece nas duas listas: uma remoção só.
+  const pendentes = new Map((pagos.data ?? []).concat(semPermissao.data ?? []).map(p => [p.id as string, p]))
+  if (!pendentes.size) return { removidos: 0 }
+
+  for (const p of pendentes.values()) {
     const inscricao = p.inscricoes as unknown as { email: string; telefone: string }
     await removerMembro(p.id, p.inscricao_id, inscricao.email, inscricao.telefone)
   }
-  return { removidos: pendentes.length }
+  return { removidos: pendentes.size }
 }

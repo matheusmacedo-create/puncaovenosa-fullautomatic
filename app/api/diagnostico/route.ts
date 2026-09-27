@@ -184,12 +184,21 @@ export function GET(request: Request) {
     // soma_itens é pura: prova que as funções do funil existem sem gastar um
     // número da sequência, como gerar_numero_inscricao gastaria.
     const { error: erroFuncao } = await supabase.rpc('soma_itens', { p_itens: [] })
+    // A migration 0016 guarda na inscrição a escolha de marketing do aviso de
+    // cookies. Não bloqueia a venda: sem ela, o que depende da escolha gravada
+    // (o Purchase que nasce do postback, o reenvio manual, o público de
+    // remarketing) simplesmente não vai ao Meta.
+    const { error: erroConsentimento } = await supabase.from('inscricoes').select('consentimento_marketing').limit(1)
 
     const banco = {
       leTabelas: !erroTabela,
       erroTabelas: erroTabela?.message ?? null,
       temFuncoes: !erroFuncao,
       erroFuncoes: erroFuncao?.message ?? null,
+      guardaConsentimentoDeMarketing: !erroConsentimento,
+      erroConsentimentoDeMarketing: erroConsentimento
+        ? `${erroConsentimento.message} — aplique a migration 0016: sem ela, nada que dependa da escolha gravada na inscrição vai ao Meta.`
+        : null,
     }
 
     /*

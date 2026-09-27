@@ -1,33 +1,34 @@
-import Script from 'next/script'
+'use client'
+
+import { useEffect } from 'react'
+import { assinarConsentimento, lerConsentimento } from '@/lib/consentimento-cliente'
+import { aplicarConsentimentoAoPixel } from '@/lib/pixel'
 import { PIXEL_ID } from '@/lib/pixel-id'
 
 /**
- * Pixel do Meta, em todas as páginas.
+ * Pixel do Meta, em todas as páginas — mas só com consentimento de marketing.
  *
- * Só é renderizado quando existe um ID configurado — nenhum pixel fictício é
- * instalado.
+ * Sem ID configurado, nada é instalado — nenhum pixel fictício. Com ID, nada
+ * do Meta chega à página enquanto a pessoa não aceitar marketing no aviso de
+ * cookies (`components/aviso-de-cookies.tsx`), ou no site principal: o cookie
+ * `cvrj_consentimento` é o mesmo em todo *.cruzvermelhariodejaneiro.org. A
+ * lógica mora em `lib/pixel.ts`; aqui só se aplica a escolha ao montar e a
+ * cada mudança.
  *
- * O `PageView` automático é pulado quando a página está dentro da gaveta da
- * landing. Ali há dois documentos vivos ao mesmo tempo, a landing e o funil,
- * e os dois carregariam o pixel: cada visitante contaria duas visitas, e todo
- * o custo por resultado sairia pela metade. Os eventos do funil continuam
- * saindo normalmente de dentro do iframe — o que não se repete é a visita.
+ * `PIXEL_ID` vem de `lib/pixel-id.ts`, um módulo neutro: este componente é de
+ * cliente e recebe o valor embutido no bundle pelo build. Nunca o importe de
+ * `lib/rastreio.ts` num Server Component (ver o comentário em
+ * `lib/pixel-id.ts`).
+ *
+ * Não há `<noscript>` com a imagem do Pixel, de propósito: ela dispararia o
+ * PageView sem passar por consentimento nenhum.
  */
 export function MetaPixel() {
-  if (!PIXEL_ID) return null
+  useEffect(() => {
+    if (!PIXEL_ID) return
+    aplicarConsentimentoAoPixel(lerConsentimento())
+    return assinarConsentimento(consentimento => aplicarConsentimentoAoPixel(consentimento, { imediato: true }))
+  }, [])
 
-  return (
-    <Script id="meta-pixel" strategy="afterInteractive">
-      {`!function(f,b,e,v,n,t,s)
-{if(f.fbq)return;n=f.fbq=function(){n.callMethod?
-n.callMethod.apply(n,arguments):n.queue.push(arguments)};
-if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
-n.queue=[];t=b.createElement(e);t.async=!0;
-t.src=v;s=b.getElementsByTagName(e)[0];
-s.parentNode.insertBefore(t,s)}(window,document,'script',
-'https://connect.facebook.net/en_US/fbevents.js');
-fbq('init', '${PIXEL_ID}');
-if (window.self === window.top) fbq('track', 'PageView');`}
-    </Script>
-  )
+  return null
 }

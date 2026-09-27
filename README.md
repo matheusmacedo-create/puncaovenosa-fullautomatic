@@ -62,7 +62,21 @@ Foto nova entra rodando o script e apontando `CoursePhoto.base` (em `lib/course-
 
 ## Páginas legais
 
-`/politica-de-privacidade` e `/politica-de-reembolso` (`app/politica-de-privacidade/page.tsx`, `app/politica-de-reembolso/page.tsx`, moldura comum em `components/legal-page.tsx`) são páginas estáticas, fora do funil. `lib/course-data.ts` aponta `privacyPolicyUrl`/`refundPolicyUrl` para elas — é o que faz o link aparecer no rodapé da landing (`components/institutional-footer.tsx`) em vez do aviso de pendência; ficando `null`, some. O mesmo par de links aparece de novo dentro do funil, logo abaixo do `PriceBreakdown`, na etapa de dados e na de pagamento (`LegalNote` em `components/enrollment-flow.tsx`) — é o ponto onde o aluno está prestes a pagar, não só o rodapé da landing, que ele pode nunca ter visto ao entrar direto pelo anúncio. O conteúdo da política de privacidade segue o termo de tratamento de dados da própria Cruz Vermelha Brasileira (LGPD, Lei nº 13.709/2018), adaptado ao que este formulário realmente coleta. O de reembolso cobre o direito de arrependimento de 7 dias corridos do art. 49 do CDC — o prazo de "5 dias úteis" para processar a devolução ali é um valor operacional, não legal; ajuste se a secretaria trabalhar com outro prazo.
+`/politica-de-privacidade`, `/politica-de-cookies` e `/politica-de-reembolso` (`app/politica-de-*/page.tsx`, moldura comum em `components/legal-page.tsx`) são páginas estáticas, fora do funil. `lib/course-data.ts` aponta `privacyPolicyUrl`/`cookiePolicyUrl`/`refundPolicyUrl` para elas, e `LinksLegais` (`components/links-legais.tsx`) põe os três links, mais "Preferências de cookies", em toda página pública: no rodapé da landing e das políticas (`components/institutional-footer.tsx`), ao lado da identificação de quem vende — nome, CNPJ, endereço e e-mail da filial (`SELLER`), como pede o Decreto nº 7.962/2013 (art. 2º) —, e numa linha discreta no fim das telas do funil, da triagem, da ficha e de `/validar`. Dentro do funil, logo abaixo do `PriceBreakdown`, na etapa de dados e na de pagamento (`LegalNote` em `components/enrollment-flow.tsx`), vem o aviso de antes de pagar: o direito de arrependimento de 7 dias, o link da política de reembolso, o da privacidade e quem vende — é o ponto onde o aluno está prestes a pagar, não só o rodapé da landing, que ele pode nunca ter visto ao entrar direto pelo anúncio.
+
+A política de privacidade diz quem é o controlador (a filial do Rio, CNPJ 08.560.973/0001-97), o canal do titular (a filial é agente de pequeno porte — Resolução CD/ANPD nº 2/2022 — e não indicou encarregado; o canal é `contato@cruzvermelhariodejaneiro.org`), a finalidade e a base legal de cada tratamento, com quem os dados são compartilhados, a transferência internacional, os direitos do art. 18 e a reclamação à ANPD. **Tudo ali sai do que o código faz**: campo novo no formulário, fornecedor novo ou evento novo para o Meta mudam a política junto. A de cookies lista o que o site guarda no navegador (nome, tipo, finalidade, duração, categoria) e é onde a pessoa muda a escolha. A de reembolso cobre o direito de arrependimento de 7 dias corridos do art. 49 do CDC e o que o Decreto nº 7.962/2013 (art. 5º) exige de quem vende pela internet — pedir pelo próprio site, confirmação imediata do recebimento, devolução pelo mesmo meio e aviso imediato à administradora do cartão. O prazo de "5 dias úteis" para processar a devolução ali é um valor operacional, não legal; ajuste se a secretaria trabalhar com outro prazo.
+
+## Consentimento de cookies
+
+O aviso de cookies (`components/aviso-de-cookies.tsx`) é o mesmo do site principal (`site/consentimento/consentimento.js` no repositório do site): primeiro nível com três botões do mesmo tamanho e estilo (Rejeitar, Personalizar, Aceitar todos), segundo nível com as categorias — Necessários sempre ligados, Estatística e Marketing desligados até a pessoa ligar — e o link "Preferências de cookies" no rodapé, que reabre as categorias (qualquer elemento com `data-cvrj-cookies`). Dentro da gaveta do checkout o primeiro nível não aparece: quem pergunta é a landing.
+
+A escolha fica no cookie `cvrj_consentimento`, gravado em `.cruzvermelhariodejaneiro.org` por 12 meses e **compartilhado com o site principal** — quem escolheu lá não é perguntado aqui, e o contrário (`lib/consentimento.ts` tem o formato; fora desse domínio, como em `localhost` e nos previews, o cookie sai sem `Domain`). `e=1` libera a medição de audiência (Vercel Web Analytics, `components/estatistica-consentida.tsx`); `m=1` libera o Pixel do Meta, a Conversions API e o público de remarketing:
+
+- **Pixel** (`lib/pixel.ts`): sem escolha, nada do Meta existe na página — nem `fbevents.js` é baixado, nem `window.fbq` é criado. Os eventos do funil ficam numa fila em memória e só vão se a resposta for "sim" naquela página; com "não", são descartados. Tirar a permissão depois chama `fbq('consent', 'revoke')` e apaga `_fbp`/`_fbc`. `/validar` e `/secretaria` nunca carregam o Pixel.
+- **Conversions API** (`lib/meta-capi.ts`): quando o evento nasce de uma requisição do navegador, vale o cookie dela. Quando não há navegador — o postback da Únicopag que confirma o pagamento, o reenvio manual em `/secretaria` —, vale a escolha gravada na inscrição (`inscricoes.consentimento_marketing`, migration `0016`), que o servidor grava a partir do cookie no cadastro, na abertura de cobrança e a cada escolha feita no aviso com a sessão aberta (`POST /api/consentimento`). Sem escolha conhecida, nada vai ao Meta.
+- **Público de remarketing** (`lib/meta-audiencia.ts`): só entra quem tem `consentimento_marketing = true`; quem tira a permissão sai na hora.
+
+A migration `0016` precisa estar aplicada para a parte sem navegador funcionar. Antes dela, o funil segue igual — a gravação falha em silêncio (só no log) e tudo o que depende da escolha gravada simplesmente não é enviado. `GET /api/diagnostico` responde `banco.guardaConsentimentoDeMarketing`.
 
 ## Arquitetura de dados
 
@@ -93,6 +107,7 @@ Três funções no banco mantêm atômico o que seria uma sequência de queries:
 | `POST /api/pagamentos/desfecho` | Encerra como `expirado` ou `recusado` |
 | `GET`/`PUT` `/api/triagem` | Lê e grava as respostas da triagem |
 | `POST /api/webhooks/unicopag` | Postback da Únicopag — confirma consultando a API, não confia no corpo |
+| `POST /api/consentimento` | Grava na inscrição da sessão a escolha de marketing do aviso de cookies |
 | `GET /api/diagnostico` | Estado da configuração e da simulação |
 
 ### Credencial do aluno
@@ -254,7 +269,9 @@ Oito etapas nomeadas, uma por trecho real do funil, definidas num lugar só (`li
 | 7 | `funil_7_triagem_fim` | As 8 perguntas foram respondidas | `CompleteRegistration` |
 | 8 | `funil_8_ficha` | Abriu a ficha do aluno, com a vaga já garantida | — |
 
-`PageView` dispara à parte, direto do script do pixel em `components/meta-pixel.tsx`, condicionado a não estar dentro do iframe do checkout (senão landing e funil contariam a visita duas vezes).
+`PageView` dispara à parte, quando o Pixel é iniciado (`lib/pixel.ts`), condicionado a não estar dentro do iframe do checkout (senão landing e funil contariam a visita duas vezes).
+
+**Nada desta seção roda sem consentimento de marketing** — ver [Consentimento de cookies](#consentimento-de-cookies). Os eventos passam por `enviarAoPixel` (`lib/pixel.ts`): esperam numa fila em memória enquanto a pessoa não escolheu, vão ao Meta se ela aceitar marketing naquela página e são descartados se ela recusar.
 
 ### Sinais de engajamento (fora do funil)
 
@@ -269,11 +286,11 @@ Via `rastrearEngajamento()` em `lib/rastreio.ts`, que é a mesma máquina do `ra
 
 A numeração no nome não é enfeite: o gerenciador do Meta lista eventos em ordem alfabética, e sem ela `funil_pago` apareceria antes de `funil_dados`.
 
-Sem `NEXT_PUBLIC_META_PIXEL_ID`, nada disto instala nenhum script — nem o pixel, nem um ID fictício. A leitura da variável vive isolada em `lib/pixel-id.ts`, fora de `lib/rastreio.ts` (que é `'use client'`): o componente que injeta o script (`components/meta-pixel.tsx`) é renderizado por `app/layout.tsx`, um Server Component, e um Server Component que importa uma constante de um módulo `'use client'` não pega o valor real — pega uma referência que o bundler não resolve fora do cliente, e ela chega serializada como texto de erro. Foi exatamente esse bug: com o ID vindo de `lib/rastreio.ts`, `!PIXEL_ID` dava falso mesmo sem variável nenhuma configurada, e o pixel era instalado do mesmo jeito.
+Sem `NEXT_PUBLIC_META_PIXEL_ID`, nada disto instala nenhum script — nem o pixel, nem um ID fictício. A leitura da variável vive isolada em `lib/pixel-id.ts`, fora de `lib/rastreio.ts` (que é `'use client'`): um Server Component que importa uma constante de um módulo `'use client'` não pega o valor real — pega uma referência que o bundler não resolve fora do cliente, e ela chega serializada como texto de erro. Foi exatamente esse bug, quando o componente do Pixel ainda era de servidor: com o ID vindo de `lib/rastreio.ts`, `!PIXEL_ID` dava falso mesmo sem variável nenhuma configurada, e o pixel era instalado do mesmo jeito.
 
 Cada etapa de dinheiro (4 e 5) exige `valorCentavos` explícito — nunca uma constante do build. `PRECO_CENTAVOS` é fixo no bundle; a cobrança é uma linha do banco, e as duas podem discordar se o preço de teste mudar no meio de uma sessão com cobrança já aberta. Etapas com valor sem esse campo emitem um aviso no console em vez de reportar um número que não foi cobrado.
 
-Repetição é tratada em duas camadas: `umaVezSo` grava em `sessionStorage` para não repetir o mesmo evento na mesma aba (a tela de pagamento consulta o servidor a cada 10s, e pode revisitar "confirmado" mais de uma vez), e um `id` (da inscrição ou da cobrança) vira `eventID` do Meta, que descarta a repetição mesmo vinda de outro dispositivo ou de uma segunda aba.
+Repetição é tratada em duas camadas: `umaVezSo` grava em `sessionStorage` para não repetir o mesmo evento na mesma aba (a tela de pagamento consulta o servidor a cada 10s, e pode revisitar "confirmado" mais de uma vez), e um `id` (da inscrição ou da cobrança) vira `eventID` do Meta, que descarta a repetição mesmo vinda de outro dispositivo ou de uma segunda aba. A marca em `sessionStorage` só é gravada quando o evento de fato vai ao Meta — sem consentimento, o Pixel não grava nada no navegador.
 
 Verificado com Playwright interceptando `/api/*` e substituindo `window.fbq` por uma função que só grava o que recebeu: as 8 etapas disparam na ordem certa, sem faltar e sem duplicar; os eventos de dinheiro carregam o valor real da cobrança simulada, não o preço do build; reentrar na tela de pagamento com a cobrança já confirmada não duplica o `Purchase`; e sem a variável de ambiente, nenhum vestígio do pixel aparece no HTML.
 
@@ -289,6 +306,8 @@ Os nomes de etapa (`funil_N_...`) moraram em `lib/rastreio.ts` até o servidor t
 
 Gênero e data de nascimento — os dois outros campos que o Gerenciador de Eventos sugere — não são enviados porque o funil nunca pergunta isso: adicionar exigiria um campo novo no formulário, uma decisão de produto (mais fricção, mais dado sensível sob LGPD), não algo para forçar por causa de uma pontuação.
 
+**Só com consentimento de marketing.** Quando o envio nasce de uma requisição do navegador do aluno (`requisicaoDoAluno`), vale o cookie `cvrj_consentimento` dela; quando não há navegador (o postback da Únicopag, o reenvio manual em `/secretaria`), vale `inscricoes.consentimento_marketing` (migration `0016`). Sem escolha conhecida, nada é enviado — e um envio barrado não entra em `meta_capi_entregas`. O reenvio manual de uma inscrição sem consentimento gravado é recusado, e o painel diz por quê.
+
 Configurado por `META_CAPI_TOKEN` (gerado no Gerenciador de Eventos → Configurações → API de Conversões), usando o mesmo `NEXT_PUBLIC_META_PIXEL_ID` como `DATASET_ID`. Sem a variável, é um no-op — o pixel do navegador segue funcionando sozinho, do mesmo jeito que sempre funcionou. `META_CAPI_TEST_EVENT_CODE` (opcional) faz os envios aparecerem em tempo real na aba "Testar eventos" do Gerenciador, para conferir antes de confiar.
 
 Nunca lança — Meta fora do ar ou token vencido não podem derrubar uma inscrição — e toda tentativa, sucesso ou falha, fica gravada em `meta_capi_entregas` (migration `0010`). É o que o bloco "Checkpoint do Pixel" em `/secretaria` lê, com reenvio manual para quem falhou.
@@ -297,7 +316,7 @@ O hash de `ph` (telefone) usa `telefoneInternacional()` (`lib/meta-hash.ts`), qu
 
 ### Público de remarketing
 
-`lib/meta-audiencia.ts` sobe, com hash, quem preencheu nome/telefone/e-mail no funil e não pagou depois de 2h (`JANELA_DE_ABANDONO_HORAS`) para um público personalizado do Meta — para anunciar de novo só para quem ficou pelo caminho, em vez de continuar mostrando anúncio de topo de funil para todo mundo.
+`lib/meta-audiencia.ts` sobe, com hash, quem preencheu nome/telefone/e-mail no funil e não pagou depois de 2h (`JANELA_DE_ABANDONO_HORAS`) para um público personalizado do Meta — para anunciar de novo só para quem ficou pelo caminho, em vez de continuar mostrando anúncio de topo de funil para todo mundo. **Só entra quem tem consentimento de marketing gravado** (`consentimento_marketing = true`, migration `0016`); quem tira a permissão no aviso de cookies sai na hora (`POST /api/consentimento`), e a rotina diária também varre essas remoções.
 
 A adição é em lote, 1x por dia: `POST /api/meta-audiencia/sync`, chamada pelo cron da Vercel (`vercel.json`) e protegida por `CRON_SECRET` (a Vercel manda automaticamente `Authorization: Bearer $CRON_SECRET` nas chamadas do cron quando a variável está definida). Uma vez por dia é o limite do plano Hobby — o Pro libera de hora em hora. A remoção é o oposto: em **tempo real**, chamada do mesmo ponto onde já disparamos o evento `pago` da Conversions API (`removerDoPublicoDeAbandono`), porque continuar pagando anúncio de remarketing para quem já comprou é dinheiro jogado fora. `meta_publico_membros` (migration `0012`) registra quem já foi enviado — impede duplicar no lote diário — e quem já foi removido; a mesma rotina diária também varre (`retentarRemocoesPendentes`) quem pagou mas cuja remoção em tempo real falhou, como rede de segurança.
 

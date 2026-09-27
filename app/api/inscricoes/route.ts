@@ -1,7 +1,8 @@
-import { NextResponse } from 'next/server'
+import { after, NextResponse } from 'next/server'
+import { gravarConsentimentoDaRequisicao } from '@/lib/consentimento-servidor'
 import { digits, fieldError, EnrollmentData } from '@/lib/enrollment'
 import { corpo, erro, rota } from '@/lib/http'
-import { contextoDoNavegador, enviarConversaoMeta } from '@/lib/meta-capi'
+import { enviarConversaoMeta } from '@/lib/meta-capi'
 import { espelharNaPlanilha } from '@/lib/planilha'
 import { gravarInscricaoId } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabase/server'
@@ -68,9 +69,13 @@ export function POST(request: Request) {
     }
 
     await gravarInscricaoId(data.id)
+    // A escolha de marketing do aviso de cookies viaja com a inscrição: é o
+    // que decide, lá na frente, se o postback da Únicopag (sem navegador, sem
+    // cookie) pode virar Purchase no Meta.
+    after(() => gravarConsentimentoDaRequisicao(data.id, request))
     espelharNaPlanilha(data.id)
     notificarSecretaria(data.id, 'inscricao_recebida')
-    enviarConversaoMeta(data.id, 'dados', { contexto: contextoDoNavegador(request) })
+    enviarConversaoMeta(data.id, 'dados', { requisicaoDoAluno: request })
     return NextResponse.json({
       id: data.id,
       status: data.status,

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ClinicalHeader } from '@/components/clinical-header'
+import { LinksLegais } from '@/components/links-legais'
 import { cepDaResposta, type Endereco, pesquisaValida, resumoDoEndereco } from '@/lib/cep'
 import { digits, loadJson, maskCep, ROTA_INSCRICAO, saveJson, STORAGE_KEYS, TriageAnswers, triageQuestions } from '@/lib/enrollment'
 import { buscarEnderecoDoCep, ErroDaApi, buscarTriagem, pesquisarEnderecos, salvarResposta } from '@/lib/api-cliente'
@@ -67,6 +68,7 @@ export function TriageFlow({ step }: { step: number }) {
       {question.type === 'multi' && <MultiQuestion options={[...question.options]} value={Array.isArray(value) ? value as string[] : []} save={save} next={next} />}
       {question.type === 'confirm' && <ConfirmQuestion options={[...question.options]} value={Array.isArray(value) ? value as boolean[] : []} save={save} next={next} />}
     </section>
+    <LinksLegais />
   </main>
 }
 

@@ -7,7 +7,7 @@ import { espelharNaPlanilha } from '@/lib/planilha'
 import { consultarTransacao } from '@/lib/unicopag'
 import { supabaseServer } from '@/lib/supabase/server'
 import { COBRANCAS, ehEtapaDeCobranca, MINUTOS_PARA_EXPIRAR } from '@/lib/enrollment'
-import { contextoDoNavegador, enviarConversaoMeta } from '@/lib/meta-capi'
+import { enviarConversaoMeta } from '@/lib/meta-capi'
 import { removerDoPublicoDeAbandono } from '@/lib/meta-audiencia'
 import { enviarComprovanteDePagamento } from '@/lib/email'
 import { notificarSecretaria } from '@/lib/webhook-secretaria'
@@ -91,7 +91,7 @@ export function GET(request: Request) {
           espelharNaPlanilha(inscricaoId)
           notificarSecretaria(inscricaoId, status === 'confirmado' ? 'pagamento_confirmado' : 'pagamento_falhou')
           if (status === 'confirmado') {
-            enviarConversaoMeta(inscricaoId, 'pago', { pagamentoId: data.id, contexto: contextoDoNavegador(request) })
+            enviarConversaoMeta(inscricaoId, 'pago', { pagamentoId: data.id, requisicaoDoAluno: request })
             enviarComprovanteDePagamento(inscricaoId, data.id)
             removerDoPublicoDeAbandono(inscricaoId)
           }

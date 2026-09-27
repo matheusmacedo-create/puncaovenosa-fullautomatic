@@ -667,7 +667,11 @@ export default async function SecretariaPage({
       </p>
 
       {params.reenviadoMeta && <p className="secretaria-selo ok" role="status">Reenviado ao Meta.</p>}
-      {params.erroMeta && <p className="secretaria-erro" role="alert">Não foi possível reenviar. Confira o log abaixo.</p>}
+      {params.erroMeta && <p className="secretaria-erro" role="alert">
+        {params.erroMeta === 'consentimento'
+          ? 'Não reenviado: esta inscrição não tem consentimento de marketing gravado, e sem ele nada vai ao Meta.'
+          : 'Não foi possível reenviar. Confira o log abaixo.'}
+      </p>}
 
       <div className={`secretaria-webhook-status ${metaConfigurado ? 'ok' : 'espera'}`}>
         {metaConfigurado
