@@ -1,8 +1,9 @@
-import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
 import { Archivo, Inter, JetBrains_Mono } from 'next/font/google'
+import { AvisoDeCookies } from '@/components/aviso-de-cookies'
 import { CheckoutOverlayProvider } from '@/components/checkout-overlay'
 import { EmbeddedFlag } from '@/components/embedded-flag'
+import { EstatisticaConsentida } from '@/components/estatistica-consentida'
 import { MetaPixel } from '@/components/meta-pixel'
 import { siteUrl } from '@/lib/site-url'
 import './globals.css'
@@ -78,11 +79,20 @@ export default function RootLayout({
   return (
     <html lang="pt-BR" className={`${archivo.variable} ${inter.variable} ${mono.variable} bg-background`}>
       <body className="font-sans antialiased">
-        {/* Em todas as páginas: o funil também é rastreado, não só a landing. */}
+        {/*
+          Primeiro no documento: é o primeiro ponto que o teclado alcança. A
+          posição na tela é fixa, no canto de baixo, de qualquer jeito.
+        */}
+        <AvisoDeCookies />
+        {/*
+          Em todas as páginas: o funil também é rastreado, não só a landing.
+          Pixel e medição de audiência só carregam com a permissão
+          correspondente no cookie `cvrj_consentimento` (lib/consentimento.ts).
+        */}
         <MetaPixel />
         <EmbeddedFlag />
         <CheckoutOverlayProvider>{children}</CheckoutOverlayProvider>
-        {process.env.NODE_ENV === 'production' && <Analytics />}
+        {process.env.NODE_ENV === 'production' && <EstatisticaConsentida />}
       </body>
     </html>
   )

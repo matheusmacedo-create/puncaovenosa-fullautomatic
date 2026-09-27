@@ -8,7 +8,21 @@ export const metadata: Metadata = {
   robots: { index: true, follow: true },
 }
 
-const ATUALIZADO_EM = '23 de agosto de 2026'
+const ATUALIZADO_EM = '27 de setembro de 2026'
+
+/*
+ * O que o Decreto nº 7.962/2013 (art. 5º) exige de quem vende pela internet,
+ * além do prazo do art. 49 do CDC: meio claro para desistir, inclusive pela
+ * mesma ferramenta da compra (§ 1º); desfazer sem custo o que for acessório
+ * (§ 2º); avisar na hora a administradora do cartão (§ 3º); e confirmar na
+ * hora o recebimento do pedido (§ 4º). As regras de negócio — prazo contado
+ * da confirmação do pagamento, 5 dias úteis para processar, o que vale depois
+ * dos 7 dias — são da secretaria e não mudam aqui.
+ */
+const PEDIDO_DE_ARREPENDIMENTO =
+  `mailto:${institutionContact.email}` +
+  `?subject=${encodeURIComponent(`Arrependimento — ${courseData.courseName}`)}` +
+  `&body=${encodeURIComponent(`Quero desistir da minha inscrição no ${courseData.courseName}, no prazo de arrependimento (art. 49 do Código de Defesa do Consumidor).\n\nNome completo:\nCPF:\n`)}`
 
 export default function PoliticaDeReembolsoPage() {
   return (
@@ -20,11 +34,25 @@ export default function PoliticaDeReembolsoPage() {
           {courseData.courseName}, com devolução integral do valor pago — sem precisar justificar o
           motivo, conforme o art. 49 do Código de Defesa do Consumidor.
         </p>
+        <p>
+          O arrependimento desfaz também, sem nenhum custo para você, o que estiver vinculado à matrícula,
+          como o parcelamento no cartão (Decreto nº 7.962/2013, art. 5º, § 2º).
+        </p>
       </LegalSection>
 
       <LegalSection title="2. Como pedir o cancelamento">
-        <p>Envie a solicitação por um destes canais, informando o nome completo e o CPF usados na inscrição:</p>
+        <p>
+          Você pode pedir pelo mesmo meio em que se inscreveu — este site — ou por outro canal abaixo,
+          informando o nome completo e o CPF usados na inscrição:
+        </p>
         <ul className={legalList}>
+          <li>
+            Aqui mesmo:{' '}
+            <a href={PEDIDO_DE_ARREPENDIMENTO} className="font-semibold underline underline-offset-4 hover:text-primary">
+              quero desistir da minha matrícula
+            </a>{' '}
+            (abre uma mensagem de e-mail já endereçada à secretaria, com o pedido escrito);
+          </li>
           <li>
             E-mail:{' '}
             <a href={`mailto:${institutionContact.email}`} className="underline underline-offset-4 hover:text-primary">
@@ -33,6 +61,10 @@ export default function PoliticaDeReembolsoPage() {
           </li>
           <li>WhatsApp da secretaria de cursos: {institutionContact.whatsappLabel}</li>
         </ul>
+        <p>
+          Confirmamos o recebimento do seu pedido imediatamente, pelo mesmo canal que você usou (Decreto nº
+          7.962/2013, art. 5º, § 4º).
+        </p>
       </LegalSection>
 
       <LegalSection title="3. Prazo e forma da devolução">
@@ -41,6 +73,11 @@ export default function PoliticaDeReembolsoPage() {
           até 5 dias úteis. O valor volta pelo mesmo meio usado no pagamento: PIX é devolvido para a
           mesma chave de origem; cartão é estornado na fatura, no prazo que a operadora do cartão
           determinar (normalmente até 2 faturas seguintes).
+        </p>
+        <p>
+          No pagamento com cartão, comunicamos o arrependimento imediatamente à administradora do cartão,
+          para que a cobrança não seja lançada na sua fatura ou, se já tiver sido, seja estornada (Decreto nº
+          7.962/2013, art. 5º, § 3º).
         </p>
       </LegalSection>
 

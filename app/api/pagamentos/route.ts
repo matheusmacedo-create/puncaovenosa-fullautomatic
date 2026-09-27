@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server'
+import { after, NextResponse } from 'next/server'
+import { gravarConsentimentoDaRequisicao } from '@/lib/consentimento-servidor'
 import { courseData } from '@/lib/course-data'
 import {
   COBRA_CURSO_A_PARTE, COBRANCAS, digits, ehEtapaDeCobranca, MAX_PARCELAS,
@@ -10,7 +11,7 @@ import { gerarPixCopiaCola } from '@/lib/pix'
 import { lerInscricaoId } from '@/lib/session'
 import { confirmacaoManualPermitida, simulacaoAtiva } from '@/lib/simulacao'
 import { supabaseServer } from '@/lib/supabase/server'
-import { contextoDoNavegador, enviarConversaoMeta } from '@/lib/meta-capi'
+import { enviarConversaoMeta } from '@/lib/meta-capi'
 import { urlDoWebhook } from '@/lib/site-url'
 import { criarPagamento, NovoPagamento, UnicopagErro } from '@/lib/unicopag'
 import { enviarEmailTransacional } from '@/lib/email'
@@ -51,6 +52,9 @@ export function POST(request: Request) {
   return rota(async () => {
     const inscricaoId = await lerInscricaoId()
     if (!inscricaoId) return erro('Preencha seus dados antes de pagar.', 401)
+    // A escolha de marketing atual vai com a cobrança: o postback que
+    // confirmar este pagamento chega sem navegador e lê o que ficar gravado.
+    after(() => gravarConsentimentoDaRequisicao(inscricaoId, request))
 
     const body = await corpo<Payload>(request)
     if (!body) return erro('Corpo da requisição inválido.', 400)
@@ -307,7 +311,7 @@ export function POST(request: Request) {
     if (data.metodo === 'pix' && data.pix_copia_cola) {
       enviarEmailTransacional(inscricaoId, 'cobranca_aberta', data.id)
     }
-    enviarConversaoMeta(inscricaoId, 'pagamento', { pagamentoId: data.id, contexto: contextoDoNavegador(request) })
+    enviarConversaoMeta(inscricaoId, 'pagamento', { pagamentoId: data.id, requisicaoDoAluno: request })
 
     return NextResponse.json({
       id: data.id,

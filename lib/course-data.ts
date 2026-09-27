@@ -78,10 +78,31 @@ export const courseData = {
   metaPixelId: PIXEL_ID,
   privacyPolicyUrl: '/politica-de-privacidade' as string | null,
   refundPolicyUrl: '/politica-de-reembolso' as string | null,
+  /**
+   * Sem o "ou null" dos outros dois de propósito: o aviso de cookies aponta
+   * para ela e o link "Preferências de cookies" cai nela quando o script não
+   * carrega. Enquanto houver aviso, precisa haver política.
+   */
+  cookiePolicyUrl: '/politica-de-cookies',
   institutionalIndicators: [] as InstitutionalIndicator[],
 }
 
 export type CourseData = typeof courseData
+
+/**
+ * Quem vende e trata os dados — a filial, com CNPJ próprio, e não a marca.
+ *
+ * É a identificação que o Decreto nº 7.962/2013 (art. 2º) exige em local de
+ * destaque onde a compra acontece, e a do controlador na Política de
+ * Privacidade. Uma fonte só, para o rodapé, o funil e as políticas não
+ * dizerem coisas diferentes.
+ */
+export const SELLER = {
+  legalName: 'Cruz Vermelha Brasileira — Filial do Estado do Rio de Janeiro',
+  cnpj: '08.560.973/0001-97',
+  address: 'Praça da Cruz Vermelha, 10 — Centro, Rio de Janeiro/RJ, CEP 20230-130',
+  email: 'contato@cruzvermelhariodejaneiro.org',
+} as const
 
 /** Dados da sede institucional onde o curso acontece. */
 export const institutionContact = {

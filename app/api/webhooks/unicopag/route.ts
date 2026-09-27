@@ -76,9 +76,11 @@ export function POST(request: Request) {
       if (!data.ja_confirmado) {
         espelharNaPlanilha(pagamento.inscricao_id)
         notificarSecretaria(pagamento.inscricao_id, 'pagamento_confirmado')
-        // Sem `contexto`: esta requisição vem do servidor da Únicopag, não do
-        // navegador do aluno — passar o IP/user-agent daqui envenenaria a
-        // correspondência avançada no Meta em vez de melhorá-la.
+        // Sem `requisicaoDoAluno`: esta requisição vem do servidor da Únicopag,
+        // não do navegador do aluno — não tem o cookie de consentimento da
+        // pessoa, e o IP/user-agent daqui envenenariam a correspondência no
+        // Meta. O envio só sai se a inscrição tiver consentimento de marketing
+        // gravado (lib/consentimento-servidor.ts); sem ele, nada vai ao Meta.
         enviarConversaoMeta(pagamento.inscricao_id, 'pago', { pagamentoId: pagamento.id })
         enviarComprovanteDePagamento(pagamento.inscricao_id, pagamento.id)
         removerDoPublicoDeAbandono(pagamento.inscricao_id)

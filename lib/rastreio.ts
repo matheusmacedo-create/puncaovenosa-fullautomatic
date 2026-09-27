@@ -2,6 +2,7 @@
 
 import { courseData } from '@/lib/course-data'
 import { type Etapa, ETAPAS, type NomeDaEtapa } from '@/lib/etapas-funil'
+import { enviarAoPixel, jaNaFilaDoPixel } from '@/lib/pixel'
 import { PIXEL_ID } from '@/lib/pixel-id'
 
 export { PIXEL_ID, ETAPAS }
@@ -14,19 +15,20 @@ export type { NomeDaEtapa }
  * também precisar delas para a Conversions API — ver `lib/etapas-funil.ts`
  * para onde foram, e o motivo.
  *
+ * Nada daqui chega ao Meta sem consentimento de marketing: os eventos passam
+ * por `enviarAoPixel` (`lib/pixel.ts`), que os segura em memória enquanto a
+ * pessoa não escolheu e os descarta se ela disse "não".
+ *
  * Sem `NEXT_PUBLIC_META_PIXEL_ID`, tudo aqui vira função vazia — nenhum pixel
  * fictício é instalado, e o funil funciona igual.
  */
 
-type Fbq = (...args: unknown[]) => void
-
-const fbq = (): Fbq | null => {
-  if (typeof window === 'undefined') return null
-  const w = window as typeof window & { fbq?: Fbq }
-  return typeof w.fbq === 'function' ? w.fbq : null
-}
-
-/** O dataLayer continua recebendo tudo, para quem preferir ler por lá. */
+/**
+ * O dataLayer continua recebendo tudo, para quem preferir ler por lá. Fica só
+ * na memória da página — nenhuma ferramenta o lê hoje. Quem ligar uma (Google
+ * Tag Manager, por exemplo) precisa condicioná-la ao consentimento, como o
+ * Pixel.
+ */
 function paraODataLayer(detalhe: Record<string, unknown>) {
   if (typeof window === 'undefined') return
   const w = window as typeof window & { dataLayer?: unknown[] }
@@ -41,12 +43,16 @@ function paraODataLayer(detalhe: Record<string, unknown>) {
  * A tela de pagamento consulta o servidor em intervalos e pode voltar para a
  * confirmação várias vezes; sem isto, uma venda de R$ 249 viraria três no
  * relatório, e o custo por aquisição apareceria um terço do real.
+ *
+ * Só lê. A marca em `sessionStorage` é gravada por `lib/pixel.ts` no momento
+ * em que o evento de fato vai ao Meta — sem permissão de marketing, nada é
+ * gravado no navegador por causa do Pixel, e um evento que ficou na fila sem
+ * ir não conta como enviado.
  */
 function jaDisparou(chave: string) {
+  if (jaNaFilaDoPixel(chave)) return true
   try {
-    if (sessionStorage.getItem(chave)) return true
-    sessionStorage.setItem(chave, '1')
-    return false
+    return Boolean(sessionStorage.getItem(chave))
   } catch {
     // Navegador com armazenamento bloqueado: melhor arriscar repetir do que
     // perder o evento.
@@ -80,7 +86,8 @@ type Opcoes = {
 
 export function rastrear(etapa: NomeDaEtapa, { dados = {}, id, umaVezSo, valorCentavos }: Opcoes = {}) {
   const { nome, evento, comValor } = ETAPAS[etapa] as Etapa
-  if (umaVezSo && jaDisparou(`cvb-rastreio:${nome}:${id ?? ''}`)) return
+  const chave = umaVezSo ? `cvb-rastreio:${nome}:${id ?? ''}` : undefined
+  if (chave && jaDisparou(chave)) return
 
   if (comValor && valorCentavos === undefined) {
     console.error(`[rastreio] etapa "${nome}" precisa de valorCentavos e não recebeu — evento enviado sem valor.`)
@@ -90,15 +97,14 @@ export function rastrear(etapa: NomeDaEtapa, { dados = {}, id, umaVezSo, valorCe
 
   paraODataLayer({ event: nome, ...corpo })
 
-  const enviar = fbq()
-  if (!enviar || !PIXEL_ID) return
-
+  if (!PIXEL_ID) return
   const opcoesDoMeta = id ? { eventID: `${nome}:${id}` } : undefined
   // O evento com nome próprio sempre vai: é ele que desenha o funil no
   // gerenciador. O evento padrão vai junto quando existe um equivalente,
   // porque é dele que as campanhas de conversão sabem otimizar.
-  enviar('trackCustom', nome, corpo, opcoesDoMeta)
-  if (evento) enviar('track', evento, corpo, opcoesDoMeta)
+  const chamadas: unknown[][] = [['trackCustom', nome, corpo, opcoesDoMeta]]
+  if (evento) chamadas.push(['track', evento, corpo, opcoesDoMeta])
+  enviarAoPixel(chamadas, chave)
 }
 
 /**
@@ -110,12 +116,12 @@ export function rastrear(etapa: NomeDaEtapa, { dados = {}, id, umaVezSo, valorCe
  * de novo não deveria contar como um segundo evento.
  */
 export function rastrearEngajamento(nome: string, dados: Record<string, unknown> = {}) {
-  if (jaDisparou(`cvb-engajamento:${nome}`)) return
+  const chave = `cvb-engajamento:${nome}`
+  if (jaDisparou(chave)) return
 
   const corpo = { evento: nome, content_name: courseData.courseName, ...dados }
   paraODataLayer({ event: nome, ...corpo })
 
-  const enviar = fbq()
-  if (!enviar || !PIXEL_ID) return
-  enviar('trackCustom', nome, corpo)
+  if (!PIXEL_ID) return
+  enviarAoPixel([['trackCustom', nome, corpo]], chave)
 }

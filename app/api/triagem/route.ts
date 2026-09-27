@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { coordenadaAproximada } from '@/lib/cep'
 import { triageQuestions } from '@/lib/enrollment'
 import { corpo, erro, rota } from '@/lib/http'
-import { contextoDoNavegador, enviarConversaoMeta } from '@/lib/meta-capi'
+import { enviarConversaoMeta } from '@/lib/meta-capi'
 import { lerInscricaoId } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabase/server'
 import { enviarEmailTransacional } from '@/lib/email'
@@ -92,7 +92,7 @@ export function PUT(request: Request) {
     if (concluida === true) {
       notificarSecretaria(inscricaoId, 'triagem_concluida')
       enviarEmailTransacional(inscricaoId, 'triagem_concluida')
-      enviarConversaoMeta(inscricaoId, 'triagemFim', { contexto: contextoDoNavegador(request) })
+      enviarConversaoMeta(inscricaoId, 'triagemFim', { requisicaoDoAluno: request })
     }
 
     return NextResponse.json({ salvo: true, concluida: concluida === true })

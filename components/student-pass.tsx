@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { Download, Share2 } from 'lucide-react'
 import { RedCross } from '@/components/clinical-header'
+import { LinksLegais } from '@/components/links-legais'
 import { CodigoQr } from '@/components/qr-code'
 import {
   COBRA_CURSO_A_PARTE, EnrollmentData, formatarBRL, loadJson, maskCpf,
@@ -94,5 +95,6 @@ export function StudentPass() {
       </div>
     </article>
     <div className="pass-actions"><button className="primary-button full" onClick={save}><Download /> Adicionar à carteira / Salvar</button><button className="secondary-button" onClick={() => window.print()}><Share2 /> Imprimir</button></div>
+    <LinksLegais />
   </main>
 }

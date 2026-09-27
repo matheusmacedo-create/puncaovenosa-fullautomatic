@@ -3,6 +3,7 @@
 import { LogoInstitucional } from '@/components/logo-institucional'
 import { Mail, MapPin } from 'lucide-react'
 import { FacebookIcon, InstagramIcon, WhatsappIcon } from '@/components/brand-icons'
+import { IdentificacaoDoVendedor, LinksLegais } from '@/components/links-legais'
 import { PendingInfo } from '@/components/pending-info'
 import { courseData, institutionContact } from '@/lib/course-data'
 import { trackFooterContactClick } from '@/lib/checkout'
@@ -120,32 +121,21 @@ export function InstitutionalFooter() {
         </div>
       </div>
 
-      {/* Barra inferior */}
+      {/* Barra inferior: quem vende (Decreto nº 7.962/2013, art. 2º) e os documentos legais. */}
       <div className="border-t border-border bg-muted">
-        <div className="mx-auto flex w-full max-w-[1120px] flex-col items-center gap-2 px-5 pb-24 pt-4 text-center text-xs text-muted-foreground sm:px-8 sm:pb-4 sm:flex-row sm:justify-between sm:text-left md:pb-4">
-          <p>© {year} Cruz Vermelha Brasileira do Rio de Janeiro</p>
-          <span className="flex items-center gap-4">
-            {courseData.privacyPolicyUrl ? (
-              <a
-                href={courseData.privacyPolicyUrl}
-                className="underline underline-offset-4 transition-colors hover:text-primary"
-              >
-                Política de Privacidade
-              </a>
-            ) : (
+        <div className="mx-auto flex w-full max-w-[1120px] flex-col items-center gap-3 px-5 pb-24 pt-4 text-center text-xs text-muted-foreground sm:px-8 sm:pb-4 md:flex-row md:items-start md:justify-between md:gap-8 md:text-left">
+          <div className="space-y-1">
+            <p>© {year} Cruz Vermelha Brasileira do Rio de Janeiro</p>
+            <IdentificacaoDoVendedor className="leading-relaxed [&_a]:underline [&_a]:underline-offset-4 [&_a:hover]:text-primary" />
+          </div>
+          <div className="flex flex-col items-center gap-1 md:items-end">
+            {!courseData.privacyPolicyUrl && (
               <PendingInfo>
                 Política de Privacidade oculta: sem página válida publicada ainda
               </PendingInfo>
             )}
-            {courseData.refundPolicyUrl && (
-              <a
-                href={courseData.refundPolicyUrl}
-                className="underline underline-offset-4 transition-colors hover:text-primary"
-              >
-                Cancelamento e Reembolso
-              </a>
-            )}
-          </span>
+            <LinksLegais className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 md:justify-end [&_a]:underline [&_a]:underline-offset-4 [&_a]:transition-colors [&_a:hover]:text-primary" />
+          </div>
         </div>
       </div>
     </footer>

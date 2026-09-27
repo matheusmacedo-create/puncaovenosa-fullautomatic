@@ -157,6 +157,12 @@ h1,h2,h3,h4 { font-family: var(--font-archivo), sans-serif; letter-spacing: -.01
 .notice { border-block: 1px solid var(--rule); padding: 12px 0; color: var(--ink-soft); font-size: 13px; }
 .legal-note { color: var(--ink-soft); font-size: 12px; line-height: 1.5; margin-top: 4px; }
 .legal-note a { color: var(--cvb-red); text-decoration: underline; }
+.legal-note strong { color: var(--ink); }
+.legal-note > * + * { margin-top: 6px; }
+/* Quem vende (Decreto nº 7.962/2013, art. 2º): presente, mas sem disputar com o preço. */
+.legal-seller { color: var(--ink-soft); font-size: 11px; line-height: 1.45; }
+.legal-seller a { color: inherit; text-decoration: underline; }
+.launcher-card .legal-seller { margin-top: 20px; }
 
 .payment-value { font: 700 38px var(--font-mono); margin-bottom: 2px; }
 /* Diz, embaixo do número grande, o que aquele número é — sem isso "R$ 99,00"
@@ -448,3 +454,48 @@ h1,h2,h3,h4 { font-family: var(--font-archivo), sans-serif; letter-spacing: -.01
 .cep-opcao:hover { border-color: var(--cvb-red); background: color-mix(in srgb, var(--cvb-red) 4%, var(--card)); }
 .cep-opcao strong { display: block; font-weight: 650; }
 .cep-opcao span { display: block; margin-top: 2px; font-size: 12px; color: var(--ink-soft); }
+
+/* Documentos legais no fim das telas do funil (components/links-legais.tsx) - */
+.links-legais { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 16px; padding: 18px 20px; font-size: 12px; line-height: 1.4; color: var(--ink-soft); }
+.links-legais a { color: inherit; text-decoration: underline; text-underline-offset: 3px; }
+.links-legais a:hover { color: var(--cvb-red); }
+.sheet-scroll .links-legais, .launcher-card .links-legais { justify-content: flex-start; padding: 18px 0 0; }
+.confirmation .links-legais { justify-content: center; }
+.pass-page .links-legais { max-width: 520px; margin: 8px auto 0; }
+@media print { .links-legais { display: none; } }
+
+/*
+ * Aviso de cookies (components/aviso-de-cookies.tsx) — o mesmo desenho do
+ * aviso do site principal, com a cor da casa. Os três botões de cada nível
+ * têm o mesmo tamanho e o mesmo estilo de propósito: nenhum empurra para o
+ * "sim" (Guia de Cookies da ANPD). Fica acima de tudo, inclusive da gaveta
+ * do checkout.
+ */
+.cvrj-ck, .cvrj-ck-painel { font-family: inherit; color: var(--ink); box-sizing: border-box; }
+.cvrj-ck { position: fixed; z-index: 2147483000; left: 16px; bottom: 16px; max-width: 520px; width: calc(100% - 32px); background: #fff; border: 1px solid #dcdfe4; border-radius: 16px; box-shadow: 0 12px 40px rgb(0 0 0 / .18); padding: 20px; }
+.cvrj-ck h2, .cvrj-ck-painel h2 { margin: 0 0 8px; font-size: 1.05rem; line-height: 1.3; font-weight: 800; letter-spacing: normal; color: var(--ink); }
+.cvrj-ck p, .cvrj-ck-painel p { margin: 0 0 12px; font-size: .92rem; line-height: 1.55; color: #333; }
+.cvrj-ck a, .cvrj-ck-painel a { color: var(--cvb-red); font-weight: 700; text-decoration: underline; }
+.cvrj-ck-botoes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 4px; }
+.cvrj-ck-botoes button { min-height: 44px; padding: 10px 8px; border: 1.5px solid var(--ink); border-radius: 10px; background: #fff; color: var(--ink); font: inherit; font-size: .9rem; font-weight: 700; line-height: 1.2; cursor: pointer; }
+.cvrj-ck-botoes button:hover { background: #f3f4f6; }
+.cvrj-ck-botoes button:focus-visible, .cvrj-ck-cat input:focus-visible + .cvrj-ck-chave, .cvrj-ck-fechar:focus-visible { outline: 3px solid var(--cvb-red); outline-offset: 2px; }
+.cvrj-ck-fundo { position: fixed; inset: 0; z-index: 2147483001; background: rgb(0 0 0 / .45); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.cvrj-ck-painel { position: relative; background: #fff; border-radius: 16px; max-width: 560px; width: 100%; max-height: calc(100dvh - 32px); overflow: auto; padding: 24px; box-shadow: 0 20px 60px rgb(0 0 0 / .3); }
+.cvrj-ck-fechar { position: absolute; top: 10px; right: 10px; width: 40px; height: 40px; border: 0; background: transparent; font-size: 1.5rem; line-height: 1; cursor: pointer; color: var(--ink); border-radius: 8px; }
+.cvrj-ck-cat { border: 1px solid #e3e5e8; border-radius: 12px; padding: 14px 16px; margin: 0 0 10px; }
+.cvrj-ck-cat label { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 12px; font-weight: 800; font-size: .95rem; cursor: pointer; }
+.cvrj-ck-cat p { margin: 6px 0 0; font-size: .86rem; }
+.cvrj-ck-cat input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.cvrj-ck-chave { flex: 0 0 auto; width: 44px; height: 26px; border-radius: 26px; background: #c4c8ce; position: relative; transition: background .15s; }
+.cvrj-ck-chave::after { content: ''; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: transform .15s; }
+.cvrj-ck-cat input:checked + .cvrj-ck-chave { background: var(--cvb-red); }
+.cvrj-ck-cat input:checked + .cvrj-ck-chave::after { transform: translateX(18px); }
+.cvrj-ck-cat input:disabled + .cvrj-ck-chave { opacity: .55; }
+.cvrj-ck-sempre { font-size: .78rem; font-weight: 700; color: #555; margin-left: auto; margin-right: 8px; }
+@media (max-width: 560px) {
+  .cvrj-ck { left: 8px; right: 8px; bottom: 8px; width: auto; padding: 16px; }
+  .cvrj-ck-botoes { grid-template-columns: 1fr; }
+  .cvrj-ck-painel { padding: 20px 16px; }
+}
+@media print { .cvrj-ck, .cvrj-ck-fundo { display: none !important; } }

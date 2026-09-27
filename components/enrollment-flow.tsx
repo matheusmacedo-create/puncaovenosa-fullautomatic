@@ -6,6 +6,7 @@ import { Check, CreditCard, Loader2, QrCode, X } from 'lucide-react'
 import { ClinicalHeader, RedCross } from '@/components/clinical-header'
 import { CodigoQr } from '@/components/qr-code'
 import { CardForm } from '@/components/card-form'
+import { IdentificacaoDoVendedor, LinksLegais } from '@/components/links-legais'
 import { PriceBreakdown } from '@/components/price-breakdown'
 import { atribuicaoAtual } from '@/lib/checkout'
 import { courseData } from '@/lib/course-data'
@@ -409,6 +410,8 @@ export function EnrollmentFlow() {
             <p className="lede">Ambiente de demonstração do checkout e da triagem do Curso de Punção Venosa. Pronto para ser ligado ao CTA da página de vendas.</p>
             <div className="course-meta"><span>8h presenciais</span><span>Sede CVB-RJ</span><span>PIX ou cartão</span></div>
             <button className="primary-button" onClick={() => go('dados')}>Abrir inscrição · matrícula {formatarBRL(PRECO_MATRICULA_CENTAVOS)}</button>
+            <IdentificacaoDoVendedor className="legal-seller" />
+            <LinksLegais />
           </section>
         </div>
       </main>
@@ -464,6 +467,7 @@ function DataStage({ data, errors, cadastro, enviando, erroGeral, update, blur, 
       <PriceBreakdown />
       <LegalNote />
       {erroGeral && <p className="error" role="alert">{erroGeral}</p>}
+      <LinksLegais novaAba />
     </div>
     <footer className="sheet-footer">
       <div className="price-summary"><small>Matrícula hoje</small><strong>{formatarBRL(PRECO_MATRICULA_CENTAVOS)}</strong></div>
@@ -480,15 +484,26 @@ function Field({ id, label, error, children }: { id: string; label: string; erro
   return <div className="field"><label htmlFor={id}>{label}</label>{children}{error && <p className="error" role="alert">{error}</p>}</div>
 }
 
-/** Aviso de privacidade e reembolso exibido antes de qualquer cobrança. */
+/**
+ * O que precisa estar à vista antes de qualquer cobrança: o direito de
+ * arrependimento de 7 dias (CDC, art. 49), onde ler as condições, como os
+ * dados são tratados e quem vende (Decreto nº 7.962/2013, art. 2º). Quem entra
+ * direto pelo anúncio pode nunca ter visto o rodapé da landing.
+ *
+ * A privacidade é informada, não "aceita": a matrícula se apoia no contrato,
+ * e consentimento não se colhe dentro de um aviso de política.
+ */
 function LegalNote() {
-  return <p className="legal-note">
-    Ao continuar, você concorda com nossa{' '}
-    {courseData.privacyPolicyUrl && <a href={courseData.privacyPolicyUrl} target="_blank" rel="noopener noreferrer">Política de Privacidade</a>}
-    {courseData.privacyPolicyUrl && courseData.refundPolicyUrl && ' e a '}
-    {courseData.refundPolicyUrl && <a href={courseData.refundPolicyUrl} target="_blank" rel="noopener noreferrer">Política de Cancelamento e Reembolso</a>}
-    .
-  </p>
+  const novaAba = { target: '_blank', rel: 'noopener noreferrer' }
+  return <div className="legal-note">
+    <p>
+      <strong>Você pode desistir em até {courseData.refundWindowDays} dias corridos</strong> após a confirmação do pagamento,
+      com devolução integral pelo mesmo meio de pagamento (art. 49 do Código de Defesa do Consumidor).
+      {courseData.refundPolicyUrl && <> Condições e como pedir na <a href={courseData.refundPolicyUrl} {...novaAba}>Política de Cancelamento e Reembolso</a>.</>}
+    </p>
+    {courseData.privacyPolicyUrl && <p>Seus dados são tratados conforme a <a href={courseData.privacyPolicyUrl} {...novaAba}>Política de Privacidade</a>.</p>}
+    <IdentificacaoDoVendedor className="legal-seller" />
+  </div>
 }
 
 function PaymentStage({ etapa, metodo, cobranca, copied, restante, enviando, erroGeral, cartao, setCartao, trocarMetodo, copyPix, gerarNovoCodigo, pagarComCartao, simular }: {
@@ -552,6 +567,7 @@ function PaymentStage({ etapa, metodo, cobranca, copied, restante, enviando, err
       <button onClick={() => simular('expirado')}>Simular expirado</button>
       <button onClick={() => simular('recusado')}>Simular recusado</button>
     </div>}
+    <LinksLegais novaAba />
   </div>
 }
 
@@ -564,11 +580,11 @@ function PaymentStage({ etapa, metodo, cobranca, copied, restante, enviando, err
  */
 function ConfirmationStage() {
   const router = useRouter()
-  return <div className="sheet-scroll confirmation"><RedCross /><h2 id="sheet-title">Vaga garantida.</h2><p>Matrícula de {formatarBRL(PRECO_MATRICULA_CENTAVOS)} confirmada. Falta só um passo.</p><p>Suas respostas definem a melhor data para a sua turma.</p><button className="primary-button full" onClick={() => router.push('/triagem/1')}>Responder 8 perguntas rápidas</button><button className="text-button" onClick={() => router.push('/minha-inscricao')}>Responder depois</button>{COBRA_CURSO_A_PARTE && <p className="confirmation-saldo">Falta o curso: {formatarBRL(PRECO_CURSO_CENTAVOS)}, que você paga até o dia da aula. O código fica guardado na sua ficha de inscrição.</p>}</div>
+  return <div className="sheet-scroll confirmation"><RedCross /><h2 id="sheet-title">Vaga garantida.</h2><p>Matrícula de {formatarBRL(PRECO_MATRICULA_CENTAVOS)} confirmada. Falta só um passo.</p><p>Suas respostas definem a melhor data para a sua turma.</p><button className="primary-button full" onClick={() => router.push('/triagem/1')}>Responder 8 perguntas rápidas</button><button className="text-button" onClick={() => router.push('/minha-inscricao')}>Responder depois</button>{COBRA_CURSO_A_PARTE && <p className="confirmation-saldo">Falta o curso: {formatarBRL(PRECO_CURSO_CENTAVOS)}, que você paga até o dia da aula. O código fica guardado na sua ficha de inscrição.</p>}<LinksLegais novaAba /></div>
 }
 
 /** Saldo do curso pago — a inscrição não deve mais nada. */
 function CourseSettledStage() {
   const router = useRouter()
-  return <div className="sheet-scroll confirmation"><RedCross /><h2 id="sheet-title">Curso pago.</h2><p>Sua inscrição está quitada. Nada mais a pagar até o dia da aula.</p><button className="primary-button full" onClick={() => router.push('/minha-inscricao')}>Ver minha inscrição</button></div>
+  return <div className="sheet-scroll confirmation"><RedCross /><h2 id="sheet-title">Curso pago.</h2><p>Sua inscrição está quitada. Nada mais a pagar até o dia da aula.</p><button className="primary-button full" onClick={() => router.push('/minha-inscricao')}>Ver minha inscrição</button><LinksLegais novaAba /></div>
 }

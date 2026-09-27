@@ -1,7 +1,7 @@
 import { InstitutionalHeader } from '@/components/institutional-header'
 import { InstitutionalFooter } from '@/components/institutional-footer'
 
-/** Moldura comum às páginas de texto legal (privacidade, reembolso). */
+/** Moldura comum às páginas de texto legal (privacidade, cookies, reembolso). */
 export function LegalPage({
   title,
   updatedAt,
@@ -24,9 +24,10 @@ export function LegalPage({
   )
 }
 
-export function LegalSection({ title, children }: { title: string; children: React.ReactNode }) {
+/** `id` vira âncora de link (ex.: `/politica-de-cookies#preferencias`), sem sumir sob o cabeçalho fixo. */
+export function LegalSection({ title, id, children }: { title: string; id?: string; children: React.ReactNode }) {
   return (
-    <section>
+    <section id={id} className={id ? 'scroll-mt-24' : undefined}>
       <h2 className="text-base font-bold text-foreground sm:text-lg">{title}</h2>
       <div className="mt-3 space-y-3 text-sm leading-relaxed text-muted-foreground sm:text-base">{children}</div>
     </section>

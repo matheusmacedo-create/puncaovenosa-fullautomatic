@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { corpo, erro, rota } from '@/lib/http'
-import { contextoDoNavegador, enviarConversaoMeta } from '@/lib/meta-capi'
+import { enviarConversaoMeta } from '@/lib/meta-capi'
 import { removerDoPublicoDeAbandono } from '@/lib/meta-audiencia'
 import { espelharNaPlanilha } from '@/lib/planilha'
 import { lerInscricaoId } from '@/lib/session'
@@ -64,7 +64,7 @@ export function POST(request: Request) {
       espelharNaPlanilha(inscricaoId)
       notificarSecretaria(inscricaoId, 'pagamento_confirmado')
       enviarComprovanteDePagamento(inscricaoId, body.pagamentoId)
-      enviarConversaoMeta(inscricaoId, 'pago', { pagamentoId: body.pagamentoId, contexto: contextoDoNavegador(request) })
+      enviarConversaoMeta(inscricaoId, 'pago', { pagamentoId: body.pagamentoId, requisicaoDoAluno: request })
       removerDoPublicoDeAbandono(inscricaoId)
     }
     return NextResponse.json({

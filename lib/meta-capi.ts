@@ -1,4 +1,6 @@
 import { after } from 'next/server'
+import { consentimentoDaRequisicao } from '@/lib/consentimento'
+import { marketingConsentidoNaInscricao } from '@/lib/consentimento-servidor'
 import { type Etapa, ETAPAS, type NomeDaEtapa } from '@/lib/etapas-funil'
 import { hash, nomeESobrenome, semAcentos, telefoneInternacional } from '@/lib/meta-hash'
 import { PIXEL_ID } from '@/lib/pixel-id'
@@ -22,9 +24,17 @@ import { supabaseServer } from '@/lib/supabase/server'
  * um evento só, em vez de contar a venda duas vezes — por isso os nomes de
  * etapa vêm de `lib/etapas-funil.ts`, e não de uma cópia local.
  *
+ * Só com consentimento de marketing — o mesmo `m=1` que libera o Pixel no
+ * navegador (cookie `cvrj_consentimento`, `lib/consentimento.ts`). Quando o
+ * envio nasce de uma requisição do próprio aluno, vale o cookie dela; quando
+ * não há navegador (postback da Únicopag, reenvio manual), vale a escolha
+ * gravada na inscrição (`lib/consentimento-servidor.ts`, migration 0016). Sem
+ * escolha conhecida, nada é enviado.
+ *
  * Nunca lança: o Meta fora do ar ou o token vencido não podem derrubar uma
  * inscrição. Toda tentativa fica registrada em `meta_capi_entregas`, que é
- * o que o bloco "Checkpoint do Pixel" em /secretaria lê.
+ * o que o bloco "Checkpoint do Pixel" em /secretaria lê. Um envio barrado por
+ * falta de consentimento não é tentativa e não entra no registro.
  */
 
 const VERSAO_API = 'v21.0'
@@ -48,10 +58,11 @@ type Contexto = { ip: string | null; userAgent: string | null; fbp: string | nul
 /**
  * IP, user-agent e os cookies `_fbp`/`_fbc` da requisição do próprio aluno —
  * são sinais que só existem quando quem chama tem o `Request` original.
- * Não use isto num postback de terceiro (Únicopag): ali `request` é do
- * servidor deles, não do navegador do aluno, e passaria o IP errado ao Meta.
+ * Só é lido depois de conferido o consentimento (ver `enviarConversaoMeta`),
+ * e nunca num postback de terceiro (Únicopag): ali `request` é do servidor
+ * deles, não do navegador do aluno, e passaria o IP errado ao Meta.
  */
-export function contextoDoNavegador(request: Request): Contexto {
+function contextoDoNavegador(request: Request): Contexto {
   const cookie = request.headers.get('cookie') ?? ''
   const fbp = cookie.match(/(?:^|;\s*)_fbp=([^;]+)/)?.[1] ?? null
   const fbc = cookie.match(/(?:^|;\s*)_fbc=([^;]+)/)?.[1] ?? null
@@ -231,14 +242,48 @@ async function enviar(inscricaoId: string, etapa: NomeDaEtapa, opts: { pagamento
   }
 }
 
-/** Agenda o envio para depois da resposta ao aluno. Sem configuração, é um no-op. */
-export function enviarConversaoMeta(inscricaoId: string, etapa: NomeDaEtapa, opts: { pagamentoId?: string; contexto?: Contexto } = {}) {
+type OpcoesDeEnvio = {
+  pagamentoId?: string
+  /**
+   * A requisição do navegador do aluno que causou o evento (cadastro,
+   * cobrança, consulta de status, confirmação manual, triagem). Com ela, vale
+   * a escolha do cookie desta requisição, e dela saem IP, user-agent e
+   * `_fbp`/`_fbc`. Sem ela — postback da Únicopag, que vem do servidor deles —,
+   * vale a escolha gravada na inscrição. Nunca passe aqui o `request` de um
+   * postback: não tem o cookie da pessoa (o envio não sairia) e o IP é o de
+   * outro servidor.
+   */
+  requisicaoDoAluno?: Request
+}
+
+/** Agenda o envio para depois da resposta ao aluno. Sem configuração ou sem consentimento de marketing, é um no-op. */
+export function enviarConversaoMeta(inscricaoId: string, etapa: NomeDaEtapa, { pagamentoId, requisicaoDoAluno }: OpcoesDeEnvio = {}) {
   if (!metaCapiConfigurado()) return
-  after(() => enviar(inscricaoId, etapa, opts))
+  if (requisicaoDoAluno) {
+    if (!consentimentoDaRequisicao(requisicaoDoAluno)?.marketing) return
+    const contexto = contextoDoNavegador(requisicaoDoAluno)
+    after(() => enviar(inscricaoId, etapa, { pagamentoId, contexto }))
+    return
+  }
+  after(async () => {
+    if (!(await marketingConsentidoNaInscricao(inscricaoId))) return
+    await enviar(inscricaoId, etapa, { pagamentoId })
+  })
+}
+
+/** O reenvio manual esbarrou na falta de consentimento — não é falha do Meta. */
+export class SemConsentimentoDeMarketing extends Error {
+  constructor() {
+    super('Inscrição sem consentimento de marketing gravado: o evento não é reenviado.')
+    this.name = 'SemConsentimentoDeMarketing'
+  }
 }
 
 /** Reenvio manual, disparado da tela /secretaria para uma entrega que falhou. */
 export async function reenviarConversaoMeta(inscricaoId: string, etapa: NomeDaEtapa, pagamentoId?: string) {
   if (!metaCapiConfigurado()) throw new Error('Conversions API não está configurada.')
+  // Sem navegador aqui também: vale o que a inscrição tem gravado hoje — quem
+  // tirou a permissão depois da falha original não recebe o reenvio.
+  if (!(await marketingConsentidoNaInscricao(inscricaoId))) throw new SemConsentimentoDeMarketing()
   await enviar(inscricaoId, etapa, { pagamentoId })
 }
