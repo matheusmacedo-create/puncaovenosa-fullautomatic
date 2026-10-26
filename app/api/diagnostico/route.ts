@@ -12,6 +12,8 @@ import { siteUrl, urlDoWebhook } from '@/lib/site-url'
 import { consultarSaldo, UnicopagErro } from '@/lib/unicopag'
 import { emailConfigurado } from '@/lib/email'
 import { webhookSecretariaConfigurado } from '@/lib/webhook-secretaria'
+import { estadoDaKapso } from '@/lib/kapso'
+import { envioLigado } from '@/lib/recuperacao-servidor'
 
 /**
  *Check-up da configuração, para diagnosticar um ambiente onde não dá para
@@ -123,6 +125,8 @@ export function GET(request: Request) {
       // Também opcional: sem as duas variáveis, nenhum evento é enviado.
       webhookSecretaria: { configurada: webhookSecretariaConfigurado() },
       emailTransacional: { configurado: emailConfigurado() },
+      // Também opcional: o número da escola na Kapso. A recuperação só envia com a trava aberta.
+      whatsappRecuperacao: { kapso: estadoDaKapso(), envioLigado: envioLigado() },
       // Também opcional: sem senha, /secretaria responde 404.
       secretaria: estadoDaSecretaria(),
       // Também opcional: sem ID, nenhum pixel fictício é instalado.

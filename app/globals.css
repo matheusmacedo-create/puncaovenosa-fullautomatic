@@ -436,6 +436,8 @@ h1,h2,h3,h4 { font-family: var(--font-archivo), sans-serif; letter-spacing: -.01
 .secretaria-contrato { margin-top: 16px; border-top: 1px solid var(--rule); padding-top: 12px; font-size: 13px; }
 .secretaria-contrato summary { cursor: pointer; font-weight: 650; }
 .secretaria-contrato p { color: var(--ink-soft); margin: 10px 0; max-width: 760px; }
+.secretaria-previa { white-space: pre-wrap; max-width: 420px; min-width: 260px; margin: 0; font-size: 13px; line-height: 1.45; }
+.secretaria-whatsapp-linha { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; font-size: 14px; }
 .secretaria-contrato code { background: #f6f5f2; border: 1px solid var(--rule); border-radius: 3px; padding: 1px 5px; font-family: var(--font-mono); font-size: 12px; }
 .secretaria-payload { background: #f6f5f2; border: 1px solid var(--rule); border-radius: 3px; padding: 12px 14px; font-family: var(--font-mono); font-size: 12px; overflow-x: auto; white-space: pre; }
 

@@ -3,6 +3,7 @@ import { RedCross } from '@/components/clinical-header'
 import { SecretariaAbas } from '@/components/secretaria-abas'
 import { SecretariaInscricoes, type LinhaInscricao } from '@/components/secretaria-inscricoes'
 import { SecretariaMapa, type PontoMapa } from '@/components/secretaria-mapa'
+import { SecretariaWhatsapp } from '@/components/secretaria-whatsapp'
 import { coordsDaResposta, resumoDaResposta } from '@/lib/cep'
 import {
   COBRA_CURSO_A_PARTE, formatarBRL, maskCpf, maskPhone, PRECO_CURSO_CENTAVOS, triageQuestions,
@@ -143,6 +144,7 @@ export default async function SecretariaPage({
     reenviadoMeta?: string; erroMeta?: string
     sincronizadoAudiencia?: string; falhasAudiencia?: string; removidosAudiencia?: string; erroAudiencia?: string
     audienciaCriada?: string; erroAudienciaCriar?: string
+    webhookLigado?: string; bloqueado?: string; erroWhatsapp?: string
   }>
 }) {
   // Deploy que não pediu por este painel não tem este painel.
@@ -500,6 +502,14 @@ export default async function SecretariaPage({
     </section>
 
         </>,
+      },
+      {
+        id: 'whatsapp',
+        rotulo: 'WhatsApp',
+        conteudo: <SecretariaWhatsapp mensagem={{
+          ok: params.webhookLigado ? 'Recebimento ligado na Kapso.' : params.bloqueado ? 'Pronto: esta pessoa não recebe mais mensagens de recuperação.' : undefined,
+          erro: params.erroWhatsapp,
+        }} />,
       },
       {
         id: 'diagnostico',
