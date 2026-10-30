@@ -8,7 +8,8 @@ export function LegalPage({
   children,
 }: {
   title: string
-  updatedAt: string
+  /** Ausente nas páginas que não são texto legal versionado. */
+  updatedAt?: string
   children: React.ReactNode
 }) {
   return (
@@ -16,7 +17,7 @@ export function LegalPage({
       <InstitutionalHeader />
       <main className="mx-auto w-full max-w-3xl px-5 py-12 sm:px-8">
         <h1 className="text-2xl font-bold text-foreground sm:text-3xl">{title}</h1>
-        <p className="mt-2 text-sm text-muted-foreground">Última atualização em {updatedAt}.</p>
+        {updatedAt && <p className="mt-2 text-sm text-muted-foreground">Última atualização em {updatedAt}.</p>}
         <div className="mt-10 space-y-8">{children}</div>
       </main>
       <InstitutionalFooter />

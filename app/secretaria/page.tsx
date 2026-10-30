@@ -56,6 +56,9 @@ const NOME_DO_EMAIL: Record<string, string> = {
   matricula_paga: 'Comprovante da matrícula',
   curso_pago: 'Comprovante do curso',
   triagem_concluida: 'Triagem recebida',
+  lembrete_pagamento_1: 'Lembrete: matrícula no pagamento',
+  lembrete_pagamento_2: 'Último lembrete do pagamento',
+  lembrete_triagem: 'Lembrete: faltam as 8 perguntas',
 }
 
 const STATUS_DE_FALHA = ['recusado', 'expirado', 'estornado']
@@ -601,6 +604,8 @@ export default async function SecretariaPage({
         no e-mail informado. Estes são os envios que cumprem essa promessa — o código PIX para quem quer pagar
         depois, o comprovante da matrícula com o número da inscrição, o do curso e o aviso de triagem recebida.
         Uma recusa da Resend (domínio não verificado, endereço inválido, cota) aparece aqui, e só aqui.
+        Os lembretes saem em 8 rodadas por dia, das 7h às 21h: a quem abriu a cobrança da matrícula e não pagou (dois, com
+        três dias entre eles) e a quem pagou e não respondeu as 8 perguntas (um).
       </p>
 
       <div className={`secretaria-webhook-status ${emailLigado ? 'ok' : 'espera'}`}>
