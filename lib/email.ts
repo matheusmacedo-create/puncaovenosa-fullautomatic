@@ -1,6 +1,8 @@
 import { after } from 'next/server'
 import { courseData, institutionContact, INSTITUTION_NAME } from '@/lib/course-data'
-import { COBRA_CURSO_A_PARTE, formatarBRL, PRECO_CENTAVOS, PRECO_CURSO_CENTAVOS, ROTA_INSCRICAO } from '@/lib/enrollment'
+import { COBRA_CURSO_A_PARTE, formatarBRL, PRECO_CENTAVOS, PRECO_CURSO_CENTAVOS, PRECO_MATRICULA_CENTAVOS, ROTA_INSCRICAO } from '@/lib/enrollment'
+import { assinar, urlAssinada, type Finalidade } from '@/lib/link-assinado'
+import { TIPOS_DE_LEMBRETE, type TipoDeLembrete } from '@/lib/lembretes-regras'
 import { siteUrl } from '@/lib/site-url'
 import { supabaseServer } from '@/lib/supabase/server'
 
@@ -22,6 +24,10 @@ import { supabaseServer } from '@/lib/supabase/server'
  * A chave nunca mora no repositório: só `.env.local` (fora do Git) ou a
  * Vercel. Sem `RESEND_API_KEY` e `EMAIL_REMETENTE`, tudo aqui é no-op — igual
  * ao webhook e à planilha.
+ *
+ * Os lembretes de recuperação (`lembrete_*`) são a exceção à regra da
+ * transição: saem da varredura diária em `lib/lembretes.ts`, que decide quem
+ * recebe. O envio, o log e a barreira contra repetição são os mesmos daqui.
  */
 
 export const TIPOS_DE_EMAIL = [
@@ -29,6 +35,7 @@ export const TIPOS_DE_EMAIL = [
   'matricula_paga',
   'curso_pago',
   'triagem_concluida',
+  ...TIPOS_DE_LEMBRETE,
 ] as const
 
 export type TipoDeEmail = (typeof TIPOS_DE_EMAIL)[number]
@@ -52,7 +59,7 @@ const TINTA = '#16181c'
 const TINTA_FRACA = '#5a6068'
 const REGUA = '#e3e1dc'
 
-function moldura(titulo: string, corpo: string) {
+function moldura(titulo: string, corpo: string, rodapeExtra = '') {
   return `<!doctype html>
 <html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${titulo}</title></head>
 <body style="margin:0;padding:24px 12px;background:#fbfaf8;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:${TINTA};line-height:1.5">
@@ -65,7 +72,7 @@ function moldura(titulo: string, corpo: string) {
     <tr><td style="padding:8px 28px 28px;font-size:15px">${corpo}</td></tr>
     <tr><td style="padding:18px 28px;border-top:1px solid ${REGUA};font-size:12px;color:${TINTA_FRACA}">
       <p style="margin:0 0 6px">Dúvidas? Fale com a secretaria no WhatsApp ${institutionContact.whatsappLabel}.</p>
-      <p style="margin:0">${institutionContact.addressShort}</p>
+      <p style="margin:0">${institutionContact.addressShort}</p>${rodapeExtra}
     </td></tr>
   </table>
 </body></html>`
@@ -91,12 +98,53 @@ type Dados = {
 
 type Mensagem = { assunto: string; html: string; texto: string }
 
+/**
+ * Endereços que a mensagem pode citar. Com `LINK_ASSINADO_SEGREDO`, cada um
+ * passa por /retomar e abre a sessão no navegador onde o e-mail foi aberto;
+ * sem ele, é o caminho comum, que só funciona no navegador do cadastro.
+ */
+type Links = {
+  pagamento: string | null
+  triagem: string | null
+  ficha: string | null
+  /** Página de confirmação para parar os lembretes. Só existe assinada. */
+  pararLembretes: string | null
+  /** Destino do `List-Unsubscribe` de um clique (RFC 8058). Só existe assinado. */
+  pararLembretesUmClique: string | null
+}
+
+/** Validade dos links de retomada: a mesma do cookie de sessão que eles abrem. */
+const DIAS_DO_LINK = 30
+/** O pedido para parar precisa funcionar mesmo num e-mail antigo. */
+const DIAS_DO_LINK_PARAR = 180
+
+export function montarLinks(inscricaoId: string): Links {
+  const base = siteUrl()
+  if (!base) return { pagamento: null, triagem: null, ficha: null, pararLembretes: null, pararLembretesUmClique: null }
+
+  const retomar = (finalidade: Finalidade, caminhoComum: string) => {
+    const p = assinar(inscricaoId, finalidade, DIAS_DO_LINK)
+    return p ? urlAssinada(base, '/retomar', p) : `${base}${caminhoComum}`
+  }
+  const parar = assinar(inscricaoId, 'parar_lembretes', DIAS_DO_LINK_PARAR)
+
+  return {
+    pagamento: retomar('pagamento', `${ROTA_INSCRICAO}?etapa=pagamento`),
+    triagem: retomar('triagem', '/triagem/1'),
+    ficha: retomar('ficha', '/minha-inscricao'),
+    pararLembretes: parar ? urlAssinada(base, '/lembretes/parar', parar) : null,
+    pararLembretesUmClique: parar ? urlAssinada(base, '/api/lembretes/parar', parar) : null,
+  }
+}
+
+export const ehLembrete = (tipo: TipoDeEmail): tipo is TipoDeLembrete =>
+  (TIPOS_DE_LEMBRETE as readonly string[]).includes(tipo)
+
 /** Primeiro nome, que é como a secretaria fala com o aluno. */
 const primeiroNome = (nome: string) => nome.trim().split(/\s+/)[0] ?? nome
 
-function montarMensagem(tipo: TipoDeEmail, dados: Dados): Mensagem {
-  const base = siteUrl()
-  const ficha = base ? `${base}/minha-inscricao` : null
+export function montarMensagem(tipo: TipoDeEmail, dados: Dados, links: Links): Mensagem {
+  const { ficha } = links
   const oi = `Oi, ${escapar(primeiroNome(dados.nome))}.`
   const curso = courseData.courseName
 
@@ -112,7 +160,7 @@ function montarMensagem(tipo: TipoDeEmail, dados: Dados): Mensagem {
            <p style="margin:0 0 12px;padding:12px;background:#f6f5f2;border:1px solid ${REGUA};font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;word-break:break-all">${escapar(dados.pixCopiaCola)}</p>`
         : '',
       paragrafo('Abra o aplicativo do seu banco, escolha PIX Copia e Cola e conclua o pagamento. A vaga fica garantida assim que ele cair.'),
-      ficha ? botao(`${base}${ROTA_INSCRICAO}?etapa=pagamento`, 'Voltar para o pagamento') : '',
+      links.pagamento ? botao(links.pagamento, 'Voltar para o pagamento') : '',
     ].join('')
     const texto = [
       `${primeiroNome(dados.nome)}, sua vaga no ${curso} está reservada.`,
@@ -132,7 +180,7 @@ function montarMensagem(tipo: TipoDeEmail, dados: Dados): Mensagem {
         : '',
       dados.valorCentavos ? paragrafo(`Valor pago: ${formatarBRL(dados.valorCentavos)}.`) : '',
       paragrafo('<strong>Falta um passo:</strong> responder 8 perguntas rápidas sobre os dias e horários que funcionam para você. É a partir delas que a secretaria monta a sua turma.'),
-      ficha ? botao(`${siteUrl()}/triagem/1`, 'Responder as 8 perguntas') : '',
+      links.triagem ? botao(links.triagem, 'Responder as 8 perguntas') : '',
       COBRA_CURSO_A_PARTE
         ? paragrafo(`<span style="color:${TINTA_FRACA}">Sobre o restante: o curso (${formatarBRL(PRECO_CURSO_CENTAVOS)}) você paga até o dia da aula, fechando o investimento total de ${formatarBRL(PRECO_CENTAVOS)}. O código fica guardado na sua ficha de inscrição.</span>`)
         : '',
@@ -159,6 +207,8 @@ function montarMensagem(tipo: TipoDeEmail, dados: Dados): Mensagem {
     return { assunto, html: moldura('Inscrição quitada', corpo), texto }
   }
 
+  if (ehLembrete(tipo)) return montarLembrete(tipo, dados, links)
+
   const assunto = `Recebemos suas respostas — ${curso}`
   const corpo = [
     paragrafo(`${oi} Recebemos suas disponibilidades. A secretaria analisa os horários e entra em contato pelo WhatsApp para confirmar a sua turma.`),
@@ -167,6 +217,77 @@ function montarMensagem(tipo: TipoDeEmail, dados: Dados): Mensagem {
   ].join('')
   const texto = `${primeiroNome(dados.nome)}, recebemos suas disponibilidades. A secretaria entra em contato pelo WhatsApp para confirmar a turma.`
   return { assunto, html: moldura('Recebemos suas respostas', corpo), texto }
+}
+
+/**
+ * Os lembretes de recuperação. Tom de secretaria, não de loja: sem contagem
+ * regressiva nem "últimas vagas" — `maxSeatsPerClass` é nulo justamente
+ * porque não há número de vagas confirmado, e um e-mail não pode afirmar o
+ * que a página se recusa a afirmar.
+ */
+function montarLembrete(tipo: TipoDeLembrete, dados: Dados, links: Links): Mensagem {
+  const nome = primeiroNome(dados.nome)
+  const oi = `Oi, ${escapar(nome)}.`
+  const curso = courseData.courseName
+  const matricula = formatarBRL(PRECO_MATRICULA_CENTAVOS)
+  const rodape = links.pararLembretes
+    ? `<p style="margin:10px 0 0">Você recebe este lembrete porque começou uma inscrição no ${curso}. <a href="${links.pararLembretes}" style="color:${TINTA_FRACA}">Não quero mais receber lembretes</a>.</p>`
+    : ''
+  const rodapeTexto = links.pararLembretes ? `\n\nPara não receber mais lembretes: ${links.pararLembretes}` : ''
+
+  if (tipo === 'lembrete_triagem') {
+    const assunto = `Falta um passo para montar sua turma — ${curso}`
+    const corpo = [
+      paragrafo(`${oi} Sua matrícula está paga${dados.numeroInscricao ? ` (inscrição <strong>${escapar(dados.numeroInscricao)}</strong>)` : ''}, mas ainda faltam as 8 perguntas sobre os dias e horários que funcionam para você.`),
+      paragrafo('É com essas respostas que a secretaria encaixa você numa turma. Sem elas, sua inscrição fica parada nesse ponto. Leva cerca de dois minutos.'),
+      links.triagem ? botao(links.triagem, 'Responder as 8 perguntas') : '',
+      paragrafo(`<span style="color:${TINTA_FRACA}">Se alguma pergunta gerar dúvida, a secretaria responde pelo WhatsApp ${institutionContact.whatsappLabel}.</span>`),
+    ].join('')
+    const texto = [
+      `${nome}, sua matrícula no ${curso} está paga, mas faltam as 8 perguntas sobre dias e horários.`,
+      'É com elas que a secretaria monta sua turma. Leva cerca de dois minutos.',
+      links.triagem ? `Responder: ${links.triagem}` : '',
+    ].filter(Boolean).join('\n') + rodapeTexto
+    return { assunto, html: moldura('Falta um passo', corpo, rodape), texto }
+  }
+
+  if (tipo === 'lembrete_pagamento_1') {
+    const assunto = `Sua matrícula no ${curso} ficou no pagamento`
+    const corpo = [
+      paragrafo(`${oi} Você começou sua matrícula no ${curso}, mas ela parou no pagamento.`),
+      paragrafo(`Para garantir a vaga, falta só a matrícula: <strong>${matricula}</strong>, no PIX ou no cartão. Seus dados já estão preenchidos.`),
+      links.pagamento ? botao(links.pagamento, 'Concluir minha matrícula') : '',
+      paragrafo(`<span style="color:${TINTA_FRACA}">Se o código PIX anterior venceu, um novo é gerado na hora, quando você abrir o link.</span>`),
+    ].join('')
+    const texto = [
+      `${nome}, sua matrícula no ${curso} parou no pagamento.`,
+      `Para garantir a vaga, falta a matrícula: ${matricula}, no PIX ou no cartão.`,
+      links.pagamento ? `Concluir: ${links.pagamento}` : '',
+    ].filter(Boolean).join('\n') + rodapeTexto
+    return { assunto, html: moldura('Sua matrícula ficou no pagamento', corpo, rodape), texto }
+  }
+
+  // lembrete_pagamento_2: o último. Responde às dúvidas que costumam
+  // segurar o pagamento, em vez de repetir o mesmo pedido.
+  const assunto = `Ainda quer fazer o ${curso}?`
+  const corpo = [
+    paragrafo(`${oi} Este é o último lembrete sobre a sua matrícula no ${curso}, que ainda não foi concluída.`),
+    paragrafo('Se ficou alguma dúvida, talvez isto ajude:'),
+    `<ul style="margin:0 0 12px;padding-left:20px">
+      <li style="margin:0 0 6px">O curso é presencial, com ${courseData.duration} de duração, na sede da ${INSTITUTION_NAME}, no ${courseData.locationLabel}.</li>
+      <li style="margin:0 0 6px">Agora você paga só a matrícula (${matricula}), que garante a vaga.${COBRA_CURSO_A_PARTE ? ` O curso (${formatarBRL(PRECO_CURSO_CENTAVOS)}) fica para depois, até o dia da aula.` : ''}</li>
+      <li style="margin:0 0 6px">Depois de pagar, você tem ${courseData.refundWindowDays} dias para desistir e receber o valor de volta.</li>
+    </ul>`,
+    links.pagamento ? botao(links.pagamento, 'Concluir minha matrícula') : '',
+    paragrafo(`<span style="color:${TINTA_FRACA}">Se preferir conversar antes, a secretaria atende pelo WhatsApp ${institutionContact.whatsappLabel}. Se mudou de ideia, não precisa fazer nada — não mandaremos outro lembrete.</span>`),
+  ].join('')
+  const texto = [
+    `${nome}, este é o último lembrete sobre a sua matrícula no ${curso}.`,
+    `Agora você paga só a matrícula (${matricula}), que garante a vaga, e tem ${courseData.refundWindowDays} dias para desistir com reembolso.`,
+    links.pagamento ? `Concluir: ${links.pagamento}` : '',
+    `Dúvidas: WhatsApp ${institutionContact.whatsappLabel}.`,
+  ].filter(Boolean).join('\n') + rodapeTexto
+  return { assunto, html: moldura('Último lembrete da sua matrícula', corpo, rodape), texto }
 }
 
 // --- Envio -------------------------------------------------------------
@@ -228,9 +349,10 @@ async function registrar(
   if (error && error.code !== '23505') console.error('[email] falha ao registrar entrega:', error)
 }
 
-async function enviar(inscricaoId: string, tipo: TipoDeEmail, pagamentoId?: string) {
+/** Diz se a mensagem saiu agora — `false` também quando já tinha saído antes. */
+async function enviar(inscricaoId: string, tipo: TipoDeEmail, pagamentoId?: string): Promise<boolean> {
   const alvo = await carregarDados(inscricaoId, pagamentoId)
-  if (!alvo) return
+  if (!alvo) return false
 
   // Já enviado com sucesso: não repete. O índice único cobre a corrida, mas
   // conferir antes evita gastar uma chamada ao provedor para ser recusado
@@ -242,9 +364,18 @@ async function enviar(inscricaoId: string, tipo: TipoDeEmail, pagamentoId?: stri
     .eq('tipo', tipo)
     .eq('sucesso', true)
     .maybeSingle()
-  if (jaEnviado) return
+  if (jaEnviado) return false
 
-  const { assunto, html, texto } = montarMensagem(tipo, alvo.dados)
+  const links = montarLinks(inscricaoId)
+  const { assunto, html, texto } = montarMensagem(tipo, alvo.dados, links)
+
+  // Descadastro de um clique (RFC 8058), só nos lembretes: Gmail e Yahoo
+  // mostram o botão "cancelar inscrição" ao lado do remetente, e quem não
+  // quer mais prefere isso a marcar como spam — o que derrubaria a entrega
+  // dos comprovantes, que saem do mesmo domínio.
+  const cabecalhos = ehLembrete(tipo) && links.pararLembretesUmClique
+    ? { 'List-Unsubscribe': `<${links.pararLembretesUmClique}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' }
+    : undefined
 
   try {
     const resposta = await fetch('https://api.resend.com/emails', {
@@ -259,6 +390,7 @@ async function enviar(inscricaoId: string, tipo: TipoDeEmail, pagamentoId?: stri
         subject: assunto,
         html,
         text: texto,
+        headers: cabecalhos,
       }),
       signal: AbortSignal.timeout(10_000),
     })
@@ -266,6 +398,7 @@ async function enviar(inscricaoId: string, tipo: TipoDeEmail, pagamentoId?: stri
     if (resposta.ok) {
       const corpo = (await resposta.json().catch(() => ({}))) as { id?: string }
       await registrar(inscricaoId, tipo, alvo.destinatario, assunto, true, corpo.id ?? null, null)
+      return true
     } else {
       const texto = await resposta.text().catch(() => '')
       console.error('[email] recusado:', resposta.status, texto)
@@ -276,6 +409,7 @@ async function enviar(inscricaoId: string, tipo: TipoDeEmail, pagamentoId?: stri
     console.error('[email] falhou ao enviar:', e)
     await registrar(inscricaoId, tipo, alvo.destinatario, assunto, false, null, mensagem)
   }
+  return false
 }
 
 /**
@@ -324,4 +458,19 @@ export function enviarComprovanteDePagamento(inscricaoId: string, pagamentoId: s
 export async function reenviarEmailTransacional(inscricaoId: string, tipo: TipoDeEmail, pagamentoId?: string) {
   if (!emailConfigurado()) return
   await enviar(inscricaoId, tipo, pagamentoId)
+}
+
+/**
+ * Lembrete de recuperação, chamado pela varredura diária (`lib/lembretes.ts`),
+ * que já decidiu quem recebe. Espera o envio — a varredura é o cron, não há
+ * aluno esperando resposta — e nunca lança.
+ */
+export async function enviarLembrete(inscricaoId: string, tipo: TipoDeLembrete): Promise<boolean> {
+  if (!emailConfigurado()) return false
+  try {
+    return await enviar(inscricaoId, tipo)
+  } catch (e) {
+    console.error('[email] erro inesperado no lembrete:', e)
+    return false
+  }
 }
