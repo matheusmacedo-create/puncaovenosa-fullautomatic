@@ -75,4 +75,14 @@ process.env.LINK_ASSINADO_SEGREDO = 'curto'
 assert.equal(assinar(id, 'ficha', 1, agora), null, 'segredo curto não assina')
 assert.deepEqual(verificar(p, agora), { ok: false, motivo: 'sem_segredo' })
 
+// Sem LINK_ASSINADO_SEGREDO, a chave sai da chave do banco — e é outra chave
+delete process.env.LINK_ASSINADO_SEGREDO
+process.env.SUPABASE_SECRET_KEY = 'sb_secret_' + 'k'.repeat(31)
+const derivado = assinar(id, 'pagamento', 30, agora)!
+assert.ok(derivado, 'assina com a chave derivada')
+assert.deepEqual(verificar(derivado, agora), { ok: true, inscricaoId: id, finalidade: 'pagamento' })
+assert.deepEqual(verificar(p, agora), { ok: false, motivo: 'assinatura' }, 'link de outra chave não vale')
+process.env.SUPABASE_SECRET_KEY = 'sb_secret_' + 'j'.repeat(31)
+assert.deepEqual(verificar(derivado, agora), { ok: false, motivo: 'assinatura' }, 'trocar a chave do banco invalida')
+
 console.log('lembretes e links assinados: ok')

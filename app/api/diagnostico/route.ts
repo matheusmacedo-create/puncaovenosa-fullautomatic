@@ -127,8 +127,6 @@ export function GET(request: Request) {
       // Sem o segredo, os links dos e-mails só funcionam no navegador do
       // cadastro, e os lembretes de recuperação não saem.
       linksAssinados: { configurados: linkAssinadoConfigurado() },
-      // A rota dos lembretes fica fechada sem o segredo que o pg_cron envia.
-      lembretes: { segredoConfigurado: (process.env.LEMBRETES_SEGREDO?.trim().length ?? 0) >= 32 },
       // Também opcional: sem senha, /secretaria responde 404.
       secretaria: estadoDaSecretaria(),
       // Também opcional: sem ID, nenhum pixel fictício é instalado.

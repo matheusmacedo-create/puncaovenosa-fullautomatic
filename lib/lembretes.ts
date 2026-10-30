@@ -34,7 +34,7 @@ const esperar = (ms: number) => new Promise(r => setTimeout(r, ms))
 
 export async function varrerLembretes(agora = Date.now()): Promise<ResultadoDaVarredura> {
   if (!emailConfigurado()) return { executada: false, motivo: 'RESEND_API_KEY/EMAIL_REMETENTE ausentes.' }
-  if (!linkAssinadoConfigurado()) return { executada: false, motivo: 'LINK_ASSINADO_SEGREDO ausente ou curto (mínimo 32 caracteres).' }
+  if (!linkAssinadoConfigurado()) return { executada: false, motivo: 'Sem chave para assinar os links (LINK_ASSINADO_SEGREDO ou SUPABASE_SECRET_KEY).' }
   if (!dentroDoHorario(agora)) return { executada: false, motivo: 'Fora do horário de envio (7h às 22h de Brasília).' }
 
   const supabase = supabaseServer()

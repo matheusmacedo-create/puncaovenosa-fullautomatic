@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from 'node:crypto'
+import { createHmac, hkdfSync, timingSafeEqual } from 'node:crypto'
 
 /**
  * Links assinados que os e-mails levam ao aluno.
@@ -11,11 +11,16 @@ import { createHmac, timingSafeEqual } from 'node:crypto'
  * branco não recupera ninguém.
  *
  * O link carrega o id da inscrição, a finalidade e a validade, assinados por
- * HMAC-SHA256 com `LINK_ASSINADO_SEGREDO`. Não é o `token_validacao`: esse
- * vai impresso no QR Code da ficha, e quem lesse o QR abriria a sessão do
- * aluno. Sem a variável, `assinar` devolve `null` e quem chama cai no link
- * comum, como antes — e os lembretes não saem, porque sem retomada eles não
- * servem para nada.
+ * HMAC-SHA256. Não é o `token_validacao`: esse vai impresso no QR Code da
+ * ficha, e quem lesse o QR abriria a sessão do aluno.
+ *
+ * A chave é `LINK_ASSINADO_SEGREDO`, quando definida; sem ela, é derivada
+ * (HKDF, com rótulo próprio) da chave secreta do Supabase que o servidor já
+ * tem — um segredo a menos para criar, copiar e esquecer. A derivação é de
+ * mão única: quem tem um link não chega à chave do banco. Consequência
+ * assumida: trocar a chave do Supabase invalida os links já enviados. Sem
+ * nenhuma das duas, `assinar` devolve `null`, quem chama cai no link comum e
+ * os lembretes não saem — sem retomada eles não servem para nada.
  *
  * Módulo puro de propósito (só `node:crypto`): é conferido por script, sem
  * banco nem Next.
@@ -27,11 +32,14 @@ export type Finalidade = (typeof FINALIDADES)[number]
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-const SEGREDO = () => {
+const SEGREDO = (): string | Buffer | null => {
   const v = process.env.LINK_ASSINADO_SEGREDO?.trim()
   // Segredo curto é adivinhável por força bruta fora do ar: quem tem um link
   // válido testa candidatos até a assinatura bater, sem tocar no servidor.
-  return v && v.length >= 32 ? v : null
+  if (v && v.length >= 32) return v
+  const chaveDoBanco = (process.env.SUPABASE_SECRET_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY)?.trim()
+  if (!chaveDoBanco || chaveDoBanco.length < 32) return null
+  return Buffer.from(hkdfSync('sha256', chaveDoBanco, 'cvb-puncao', 'link-assinado:v1', 32))
 }
 
 export function linkAssinadoConfigurado() {
@@ -41,7 +49,7 @@ export function linkAssinadoConfigurado() {
 /** Base64url sem preenchimento: nada de `=`, `+` ou `/` para quebrar na URL. */
 const base64url = (b: Buffer) => b.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 
-function assinatura(segredo: string, inscricaoId: string, finalidade: Finalidade, expira: number) {
+function assinatura(segredo: string | Buffer, inscricaoId: string, finalidade: Finalidade, expira: number) {
   return base64url(createHmac('sha256', segredo).update(`${inscricaoId}.${finalidade}.${expira}`).digest())
 }
 
