@@ -1,7 +1,6 @@
 {
   "regions": ["gru1"],
   "crons": [
-    { "path": "/api/meta-audiencia/sync", "schedule": "0 9 * * *" },
-    { "path": "/api/lembretes/sync", "schedule": "0 13 * * *" }
+    { "path": "/api/meta-audiencia/sync", "schedule": "0 9 * * *" }
   ]
 }

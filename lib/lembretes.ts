@@ -1,11 +1,13 @@
 import { emailConfigurado, enviarLembrete } from '@/lib/email'
-import { lembreteDevido, TIPOS_DE_LEMBRETE, type Candidato, type TipoDeLembrete } from '@/lib/lembretes-regras'
+import { dentroDoHorario, lembreteDevido, TIPOS_DE_LEMBRETE, type Candidato, type TipoDeLembrete } from '@/lib/lembretes-regras'
 import { linkAssinadoConfigurado } from '@/lib/link-assinado'
 import { supabaseServer } from '@/lib/supabase/server'
 
 /**
- * Varredura diária dos lembretes de recuperação (GET /api/lembretes/sync,
- * cron da Vercel). Lê o banco, pergunta a `lembreteDevido` quem recebe o
+ * Varredura dos lembretes de recuperação (GET /api/lembretes/sync), em 8
+ * rodadas por dia pelo GitHub Actions (.github/workflows/lembretes.yml).
+ * Rodar mais vezes não manda mais e-mails por pessoa — cada lembrete continua
+ * saindo uma vez só —, faz cada um chegar mais perto do momento certo. Lê o banco, pergunta a `lembreteDevido` quem recebe o
  * quê e envia por `enviarLembrete`, que grava cada tentativa em
  * `email_entregas` — é o mesmo log, e a mesma barreira contra repetição, dos
  * e-mails de transição.
@@ -33,6 +35,7 @@ const esperar = (ms: number) => new Promise(r => setTimeout(r, ms))
 export async function varrerLembretes(agora = Date.now()): Promise<ResultadoDaVarredura> {
   if (!emailConfigurado()) return { executada: false, motivo: 'RESEND_API_KEY/EMAIL_REMETENTE ausentes.' }
   if (!linkAssinadoConfigurado()) return { executada: false, motivo: 'LINK_ASSINADO_SEGREDO ausente ou curto (mínimo 32 caracteres).' }
+  if (!dentroDoHorario(agora)) return { executada: false, motivo: 'Fora do horário de envio (7h às 22h de Brasília).' }
 
   const supabase = supabaseServer()
   const desde = new Date(agora - DIAS_DE_LEITURA * 86_400_000).toISOString()

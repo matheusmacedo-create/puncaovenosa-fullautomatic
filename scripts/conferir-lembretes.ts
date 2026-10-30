@@ -5,7 +5,7 @@
  *   npx tsx scripts/conferir-lembretes.ts
  */
 import assert from 'node:assert/strict'
-import { lembreteDevido, type Candidato } from '../lib/lembretes-regras'
+import { dentroDoHorario, lembreteDevido, type Candidato } from '../lib/lembretes-regras'
 import { assinar, verificar } from '../lib/link-assinado'
 
 // O segredo é lido a cada chamada, não na importação.
@@ -49,6 +49,13 @@ assert.equal(caso({ ...pago, status: 'triagem_concluida' }), null)
 assert.equal(caso({ ...pago, enviados: { lembrete_triagem: agora - D } }), null)
 assert.equal(caso({ ...pago, matriculaPagaEm: agora - 15 * D }), null)
 assert.equal(caso({ ...pago, enviados: { lembrete_pagamento_1: agora - 3 * D } }), 'lembrete_triagem', 'pagou depois do lembrete')
+
+// Horário de envio (Brasília = UTC−3)
+assert.equal(dentroDoHorario(Date.parse('2026-10-30T10:07:00Z')), true, '7h07')
+assert.equal(dentroDoHorario(Date.parse('2026-10-31T00:07:00Z')), true, '21h07')
+assert.equal(dentroDoHorario(Date.parse('2026-10-31T01:30:00Z')), true, '22h30, rodada das 21h atrasada')
+assert.equal(dentroDoHorario(Date.parse('2026-10-31T02:00:00Z')), false, '23h')
+assert.equal(dentroDoHorario(Date.parse('2026-10-30T08:00:00Z')), false, '5h')
 
 // Links assinados
 const id = '6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b'

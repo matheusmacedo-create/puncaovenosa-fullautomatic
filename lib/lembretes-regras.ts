@@ -30,11 +30,26 @@ export const HORAS_ATE_LEMBRETE_TRIAGEM = 20
 export const DIAS_MAXIMOS_TRIAGEM = 14
 
 /**
- * A varredura é diária, mas o horário exato do cron varia alguns minutos.
- * Sem folga, um lembrete marcado para "3 dias depois" cairia para o 4º dia
- * sempre que o cron de hoje rodasse um pouco mais cedo que o de 3 dias atrás.
+ * O horário exato de cada rodada varia alguns minutos (o agendamento do
+ * GitHub atrasa em horário de pico). Sem folga, um lembrete marcado para "3
+ * dias depois" pularia para a rodada seguinte sempre que a de hoje rodasse
+ * um pouco mais cedo que a de 3 dias atrás.
  */
 const FOLGA_MS = 2 * 60 * 60 * 1000
+
+/**
+ * Janela do dia em que lembrete pode sair, no horário de Brasília (UTC−3, sem
+ * horário de verão desde 2019). As rodadas agendadas já caem dentro dela; a
+ * conferência existe para uma chamada manual ou um agendamento atrasado não
+ * mandar e-mail de madrugada.
+ */
+export const HORA_PRIMEIRA_RODADA = 7
+export const HORA_ULTIMA_RODADA = 22
+
+export function dentroDoHorario(agora: number) {
+  const hora = new Date(agora - 3 * 60 * 60 * 1000).getUTCHours()
+  return hora >= HORA_PRIMEIRA_RODADA && hora <= HORA_ULTIMA_RODADA
+}
 
 const HORA = 60 * 60 * 1000
 const DIA = 24 * HORA
