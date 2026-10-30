@@ -30,8 +30,8 @@ export const HORAS_ATE_LEMBRETE_TRIAGEM = 20
 export const DIAS_MAXIMOS_TRIAGEM = 14
 
 /**
- * O horário exato de cada rodada varia alguns minutos (o agendamento do
- * GitHub atrasa em horário de pico). Sem folga, um lembrete marcado para "3
+ * O horário exato de cada rodada varia (a rodada leva minutos, e um pedido
+ * que falhou espera a próxima). Sem folga, um lembrete marcado para "3
  * dias depois" pularia para a rodada seguinte sempre que a de hoje rodasse
  * um pouco mais cedo que a de 3 dias atrás.
  */

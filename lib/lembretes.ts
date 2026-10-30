@@ -5,7 +5,7 @@ import { supabaseServer } from '@/lib/supabase/server'
 
 /**
  * Varredura dos lembretes de recuperação (GET /api/lembretes/sync), em 8
- * rodadas por dia pelo GitHub Actions (.github/workflows/lembretes.yml).
+ * rodadas por dia pelo pg_cron do Supabase (migration 0018).
  * Rodar mais vezes não manda mais e-mails por pessoa — cada lembrete continua
  * saindo uma vez só —, faz cada um chegar mais perto do momento certo. Lê o banco, pergunta a `lembreteDevido` quem recebe o
  * quê e envia por `enviarLembrete`, que grava cada tentativa em
