@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { verificar } from '@/lib/link-assinado'
+import { idDoLink, verificar } from '@/lib/link-assinado'
 import { supabaseServer } from '@/lib/supabase/server'
 
 /**
@@ -28,7 +28,11 @@ export async function POST(request: Request) {
     }
   }
 
-  const resultado = verificar(p)
+  const id = idDoLink(p)
+  const { data: inscricao } = id
+    ? await supabaseServer().from('inscricoes').select('email').eq('id', id).maybeSingle()
+    : { data: null }
+  const resultado = verificar(p, inscricao?.email ?? null)
   const veioDoFormulario = !url.searchParams.has('s')
   if (!resultado.ok || resultado.finalidade !== 'parar_lembretes') {
     return veioDoFormulario

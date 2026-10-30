@@ -19,7 +19,12 @@ import { assinarConsentimento, lerConsentimento } from '@/lib/consentimento-clie
  */
 function antesDeEnviar(evento: BeforeSendEvent): BeforeSendEvent | null {
   if (!lerConsentimento()?.estatistica) return null
-  return { ...evento, url: evento.url.replace(/\/validar\/[^/?#]+/, '/validar/[token]') }
+  return {
+    ...evento,
+    url: evento.url
+      .replace(/\/validar\/[^/?#]+/, '/validar/[token]')
+      .replace(/(\/lembretes\/parar)\?[^#]*/, '$1'),
+  }
 }
 
 export function EstatisticaConsentida() {

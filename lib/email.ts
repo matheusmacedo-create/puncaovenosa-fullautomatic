@@ -118,15 +118,15 @@ const DIAS_DO_LINK = 30
 /** O pedido para parar precisa funcionar mesmo num e-mail antigo. */
 const DIAS_DO_LINK_PARAR = 180
 
-export function montarLinks(inscricaoId: string): Links {
+export function montarLinks(inscricaoId: string, email: string): Links {
   const base = siteUrl()
   if (!base) return { pagamento: null, triagem: null, ficha: null, pararLembretes: null, pararLembretesUmClique: null }
 
   const retomar = (finalidade: Finalidade, caminhoComum: string) => {
-    const p = assinar(inscricaoId, finalidade, DIAS_DO_LINK)
+    const p = assinar(inscricaoId, email, finalidade, DIAS_DO_LINK)
     return p ? urlAssinada(base, '/retomar', p) : `${base}${caminhoComum}`
   }
-  const parar = assinar(inscricaoId, 'parar_lembretes', DIAS_DO_LINK_PARAR)
+  const parar = assinar(inscricaoId, email, 'parar_lembretes', DIAS_DO_LINK_PARAR)
 
   return {
     pagamento: retomar('pagamento', `${ROTA_INSCRICAO}?etapa=pagamento`),
@@ -366,7 +366,7 @@ async function enviar(inscricaoId: string, tipo: TipoDeEmail, pagamentoId?: stri
     .maybeSingle()
   if (jaEnviado) return false
 
-  const links = montarLinks(inscricaoId)
+  const links = montarLinks(inscricaoId, alvo.destinatario)
   const { assunto, html, texto } = montarMensagem(tipo, alvo.dados, links)
 
   // Descadastro de um clique (RFC 8058), só nos lembretes: Gmail e Yahoo
@@ -383,6 +383,11 @@ async function enviar(inscricaoId: string, tipo: TipoDeEmail, pagamentoId?: stri
       headers: {
         Authorization: `Bearer ${CHAVE()}`,
         'Content-Type': 'application/json',
+        // Só nos lembretes, que saem de rodadas: se duas se sobrepõem, ou se
+        // a função morre entre o aceite da Resend e a gravação no log, a
+        // segunda tentativa no prazo de 24h é descartada pela própria Resend
+        // em vez de virar e-mail repetido.
+        ...(ehLembrete(tipo) ? { 'Idempotency-Key': `${tipo}/${inscricaoId}` } : {}),
       },
       body: JSON.stringify({
         from: REMETENTE(),
@@ -390,6 +395,9 @@ async function enviar(inscricaoId: string, tipo: TipoDeEmail, pagamentoId?: stri
         subject: assunto,
         html,
         text: texto,
+        // Responder ao e-mail chega à secretaria: o remetente é um endereço
+        // só de envio, sem caixa de entrada.
+        reply_to: institutionContact.email,
         headers: cabecalhos,
       }),
       signal: AbortSignal.timeout(10_000),
@@ -399,6 +407,10 @@ async function enviar(inscricaoId: string, tipo: TipoDeEmail, pagamentoId?: stri
       const corpo = (await resposta.json().catch(() => ({}))) as { id?: string }
       await registrar(inscricaoId, tipo, alvo.destinatario, assunto, true, corpo.id ?? null, null)
       return true
+    } else if (resposta.status === 409 && ehLembrete(tipo)) {
+      // Mesma chave de idempotência já usada: a mensagem saiu numa tentativa
+      // anterior, ou ainda está saindo. Não é falha, e não se repete.
+      console.warn('[email] lembrete já enviado em outra tentativa:', tipo, inscricaoId)
     } else {
       const texto = await resposta.text().catch(() => '')
       console.error('[email] recusado:', resposta.status, texto)

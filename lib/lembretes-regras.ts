@@ -70,7 +70,12 @@ export type Candidato = {
 export function lembreteDevido(c: Candidato, agora: number): TipoDeLembrete | null {
   if (!c.email || c.lembretesDesligados || c.status === 'cancelada') return null
 
-  if (c.matriculaPagaEm === null) {
+  // O status da inscrição também diz "pagou": só `confirmar_pagamento` a
+  // leva a `paga`. Conferir os dois evita cobrar quem já pagou quando a
+  // linha da cobrança confirmada não chega à varredura.
+  const jaPagou = c.status === 'paga' || c.status === 'triagem_concluida'
+
+  if (c.matriculaPagaEm === null && !jaPagou) {
     if (c.primeiraCobrancaEm === null) return null
     const idade = agora - c.primeiraCobrancaEm
     if (idade > DIAS_MAXIMOS_PAGAMENTO * DIA) return null
@@ -83,6 +88,9 @@ export function lembreteDevido(c: Candidato, agora: number): TipoDeLembrete | nu
 
   if (c.status === 'triagem_concluida' || c.passosRespondidos >= 8) return null
   if (c.enviados.lembrete_triagem !== undefined) return null
+  // Pago pelo status, sem a data da confirmação: sem saber há quanto tempo,
+  // não há como respeitar a espera antes do lembrete.
+  if (c.matriculaPagaEm === null) return null
   const desdeOPagamento = agora - c.matriculaPagaEm
   if (desdeOPagamento > DIAS_MAXIMOS_TRIAGEM * DIA) return null
   return desdeOPagamento >= HORAS_ATE_LEMBRETE_TRIAGEM * HORA ? 'lembrete_triagem' : null

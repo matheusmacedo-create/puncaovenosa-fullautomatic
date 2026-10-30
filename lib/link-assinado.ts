@@ -49,8 +49,17 @@ export function linkAssinadoConfigurado() {
 /** Base64url sem preenchimento: nada de `=`, `+` ou `/` para quebrar na URL. */
 const base64url = (b: Buffer) => b.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 
-function assinatura(segredo: string | Buffer, inscricaoId: string, finalidade: Finalidade, expira: number) {
-  return base64url(createHmac('sha256', segredo).update(`${inscricaoId}.${finalidade}.${expira}`).digest())
+/**
+ * O e-mail entra na assinatura mas não na URL: o link só vale enquanto a
+ * inscrição tiver o mesmo endereço para onde ele foi mandado. Um e-mail
+ * digitado errado e corrigido depois, ou trocado por outra pessoa no mesmo
+ * CPF, invalida os links que saíram para o endereço antigo — senão quem
+ * recebeu por engano abriria a sessão de outra pessoa por 30 dias.
+ */
+const normalizarEmail = (email: string) => email.trim().toLowerCase()
+
+function assinatura(segredo: string | Buffer, inscricaoId: string, email: string, finalidade: Finalidade, expira: number) {
+  return base64url(createHmac('sha256', segredo).update(`${inscricaoId}.${finalidade}.${expira}.${normalizarEmail(email)}`).digest())
 }
 
 export type Parametros = { i: string; f: Finalidade; x: string; s: string }
@@ -59,19 +68,27 @@ export type Parametros = { i: string; f: Finalidade; x: string; s: string }
  * Parâmetros de um link válido por `dias`. `agora` existe para o script de
  * conferência; quem chama no app não passa.
  */
-export function assinar(inscricaoId: string, finalidade: Finalidade, dias: number, agora = Date.now()): Parametros | null {
+export function assinar(inscricaoId: string, email: string, finalidade: Finalidade, dias: number, agora = Date.now()): Parametros | null {
   const segredo = SEGREDO()
-  if (!segredo || !UUID.test(inscricaoId)) return null
+  if (!segredo || !UUID.test(inscricaoId) || !email.trim()) return null
   const expira = Math.floor(agora / 1000) + Math.round(dias * 86_400)
-  return { i: inscricaoId, f: finalidade, x: String(expira), s: assinatura(segredo, inscricaoId, finalidade, expira) }
+  return { i: inscricaoId, f: finalidade, x: String(expira), s: assinatura(segredo, inscricaoId, email, finalidade, expira) }
+}
+
+/**
+ * O id que o link diz carregar, ainda sem conferir nada — serve só para
+ * buscar o e-mail atual da inscrição, que `verificar` precisa.
+ */
+export function idDoLink(p: Record<string, string | null | undefined>) {
+  return p.i && UUID.test(p.i) ? p.i : null
 }
 
 export type Verificacao =
   | { ok: true; inscricaoId: string; finalidade: Finalidade }
   | { ok: false; motivo: 'sem_segredo' | 'malformado' | 'expirado' | 'assinatura' }
 
-/** Confere um link recebido. Comparação em tempo constante. */
-export function verificar(p: Record<string, string | null | undefined>, agora = Date.now()): Verificacao {
+/** Confere um link recebido contra o e-mail atual da inscrição. Comparação em tempo constante. */
+export function verificar(p: Record<string, string | null | undefined>, email: string | null, agora = Date.now()): Verificacao {
   const segredo = SEGREDO()
   if (!segredo) return { ok: false, motivo: 'sem_segredo' }
 
@@ -80,7 +97,8 @@ export function verificar(p: Record<string, string | null | undefined>, agora = 
     return { ok: false, motivo: 'malformado' }
   }
 
-  const esperada = Buffer.from(assinatura(segredo, i, f as Finalidade, Number(x)))
+  if (!email?.trim()) return { ok: false, motivo: 'assinatura' }
+  const esperada = Buffer.from(assinatura(segredo, i, email, f as Finalidade, Number(x)))
   const recebida = Buffer.from(s)
   // Confere a assinatura antes da validade: um link adulterado é recusado
   // como adulterado, não como "expirado", que convidaria a tentar de novo.

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { ROTA_INSCRICAO } from '@/lib/enrollment'
-import { verificar, type Finalidade } from '@/lib/link-assinado'
+import { idDoLink, verificar, type Finalidade } from '@/lib/link-assinado'
 import { gravarInscricaoId } from '@/lib/session'
 import { supabaseServer } from '@/lib/supabase/server'
 
@@ -22,22 +22,21 @@ const DESTINO: Partial<Record<Finalidade, string>> = {
 export async function GET(request: Request) {
   const url = new URL(request.url)
   const p = Object.fromEntries(url.searchParams)
-  const resultado = verificar(p)
+  const id = idDoLink(p)
+
+  // O e-mail atual da inscrição faz parte da assinatura: link mandado a um
+  // endereço que depois foi corrigido não abre mais a sessão. Inscrição
+  // apagada depois do envio também cai aqui, sem e-mail para conferir.
+  const { data } = id
+    ? await supabaseServer().from('inscricoes').select('email').eq('id', id).maybeSingle()
+    : { data: null }
+  const resultado = verificar(p, data?.email ?? null)
   const destino = resultado.ok ? DESTINO[resultado.finalidade] : undefined
 
   if (!resultado.ok || !destino) {
     if (!resultado.ok && resultado.motivo !== 'expirado') console.warn('[retomar] link recusado:', resultado.motivo)
     return NextResponse.redirect(new URL(ROTA_INSCRICAO, url), 303)
   }
-
-  // A inscrição pode ter sido apagada depois do envio: sessão para uma linha
-  // que não existe só daria um funil quebrado.
-  const { data } = await supabaseServer()
-    .from('inscricoes')
-    .select('id')
-    .eq('id', resultado.inscricaoId)
-    .maybeSingle()
-  if (!data) return NextResponse.redirect(new URL(ROTA_INSCRICAO, url), 303)
 
   await gravarInscricaoId(resultado.inscricaoId)
   return NextResponse.redirect(new URL(destino, url), 303)

@@ -6,7 +6,7 @@
  */
 import assert from 'node:assert/strict'
 import { dentroDoHorario, lembreteDevido, type Candidato } from '../lib/lembretes-regras'
-import { assinar, verificar } from '../lib/link-assinado'
+import { assinar, idDoLink, verificar } from '../lib/link-assinado'
 
 // O segredo é lido a cada chamada, não na importação.
 process.env.LINK_ASSINADO_SEGREDO = 'x'.repeat(40)
@@ -35,6 +35,9 @@ assert.equal(caso({ enviados: { lembrete_pagamento_1: agora - 1 * D } }), null)
 assert.equal(caso({ enviados: { lembrete_pagamento_1: agora - 3 * D + 30 * 60_000 } }), 'lembrete_pagamento_2', 'folga do horário do cron')
 assert.equal(caso({ enviados: { lembrete_pagamento_1: agora - 4 * D, lembrete_pagamento_2: agora - D } }), null, 'depois do segundo, silêncio')
 
+assert.equal(caso({ status: 'paga' }), null, 'status pago sem a linha da cobrança confirmada')
+assert.equal(caso({ status: 'triagem_concluida' }), null)
+
 // Ninguém recebe
 assert.equal(caso({ email: null }), null)
 assert.equal(caso({ lembretesDesligados: true }), null)
@@ -59,30 +62,39 @@ assert.equal(dentroDoHorario(Date.parse('2026-10-30T08:00:00Z')), false, '5h')
 
 // Links assinados
 const id = '6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b'
-const p = assinar(id, 'pagamento', 30, agora)!
+const email = 'Aluna@Exemplo.com'
+const p = assinar(id, email, 'pagamento', 30, agora)!
 assert.ok(p)
-assert.deepEqual(verificar(p, agora), { ok: true, inscricaoId: id, finalidade: 'pagamento' })
-assert.deepEqual(verificar(p, agora + 31 * D), { ok: false, motivo: 'expirado' })
-assert.deepEqual(verificar({ ...p, f: 'ficha' }, agora), { ok: false, motivo: 'assinatura' }, 'trocar a finalidade invalida')
-assert.deepEqual(verificar({ ...p, i: id.replace('6f', '7f') }, agora), { ok: false, motivo: 'assinatura' }, 'trocar a inscrição invalida')
-assert.deepEqual(verificar({ ...p, x: String(Number(p.x) + 999_999) }, agora), { ok: false, motivo: 'assinatura' }, 'esticar a validade invalida')
-assert.deepEqual(verificar({ ...p, s: p.s.slice(1) }, agora), { ok: false, motivo: 'assinatura' })
-assert.deepEqual(verificar({ i: id }, agora), { ok: false, motivo: 'malformado' })
+assert.ok(!JSON.stringify(p).toLowerCase().includes('exemplo'), 'e-mail não vai na URL')
+assert.deepEqual(verificar(p, email, agora), { ok: true, inscricaoId: id, finalidade: 'pagamento' })
+assert.deepEqual(verificar(p, ' aluna@exemplo.com ', agora), { ok: true, inscricaoId: id, finalidade: 'pagamento' }, 'caixa e espaços não importam')
+assert.deepEqual(verificar(p, 'outra@exemplo.com', agora), { ok: false, motivo: 'assinatura' }, 'e-mail corrigido invalida o link antigo')
+assert.deepEqual(verificar(p, null, agora), { ok: false, motivo: 'assinatura' }, 'inscrição sem e-mail não abre')
+assert.deepEqual(verificar(p, email, agora + 31 * D), { ok: false, motivo: 'expirado' })
+assert.deepEqual(verificar({ ...p, f: 'ficha' }, email, agora), { ok: false, motivo: 'assinatura' }, 'trocar a finalidade invalida')
+assert.deepEqual(verificar({ ...p, i: id.replace('6f', '7f') }, email, agora), { ok: false, motivo: 'assinatura' }, 'trocar a inscrição invalida')
+assert.deepEqual(verificar({ ...p, x: String(Number(p.x) + 999_999) }, email, agora), { ok: false, motivo: 'assinatura' }, 'esticar a validade invalida')
+assert.deepEqual(verificar({ ...p, s: p.s.slice(1) }, email, agora), { ok: false, motivo: 'assinatura' })
+assert.deepEqual(verificar({ i: id }, email, agora), { ok: false, motivo: 'malformado' })
+assert.equal(idDoLink(p), id)
+assert.equal(idDoLink({ i: 'x' }), null)
 assert.ok(!/[=+/]/.test(p.s), 'assinatura segura para URL')
-assert.equal(assinar('nao-e-uuid', 'ficha', 1, agora), null)
+assert.equal(assinar('nao-e-uuid', email, 'ficha', 1, agora), null)
+assert.equal(assinar(id, ' ', 'ficha', 1, agora), null)
 
 process.env.LINK_ASSINADO_SEGREDO = 'curto'
-assert.equal(assinar(id, 'ficha', 1, agora), null, 'segredo curto não assina')
-assert.deepEqual(verificar(p, agora), { ok: false, motivo: 'sem_segredo' })
+process.env.SUPABASE_SECRET_KEY = ''
+assert.equal(assinar(id, email, 'ficha', 1, agora), null, 'segredo curto não assina')
+assert.deepEqual(verificar(p, email, agora), { ok: false, motivo: 'sem_segredo' })
 
 // Sem LINK_ASSINADO_SEGREDO, a chave sai da chave do banco — e é outra chave
 delete process.env.LINK_ASSINADO_SEGREDO
 process.env.SUPABASE_SECRET_KEY = 'sb_secret_' + 'k'.repeat(31)
-const derivado = assinar(id, 'pagamento', 30, agora)!
+const derivado = assinar(id, email, 'pagamento', 30, agora)!
 assert.ok(derivado, 'assina com a chave derivada')
-assert.deepEqual(verificar(derivado, agora), { ok: true, inscricaoId: id, finalidade: 'pagamento' })
-assert.deepEqual(verificar(p, agora), { ok: false, motivo: 'assinatura' }, 'link de outra chave não vale')
+assert.deepEqual(verificar(derivado, email, agora), { ok: true, inscricaoId: id, finalidade: 'pagamento' })
+assert.deepEqual(verificar(p, email, agora), { ok: false, motivo: 'assinatura' }, 'link de outra chave não vale')
 process.env.SUPABASE_SECRET_KEY = 'sb_secret_' + 'j'.repeat(31)
-assert.deepEqual(verificar(derivado, agora), { ok: false, motivo: 'assinatura' }, 'trocar a chave do banco invalida')
+assert.deepEqual(verificar(derivado, email, agora), { ok: false, motivo: 'assinatura' }, 'trocar a chave do banco invalida')
 
 console.log('lembretes e links assinados: ok')

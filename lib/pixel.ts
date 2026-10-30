@@ -33,10 +33,12 @@ const SCRIPT_DO_PIXEL = 'https://connect.facebook.net/en_US/fbevents.js'
 
 /**
  * Páginas que nunca carregam o Pixel, com ou sem permissão: `/validar/<token>`
- * levaria a credencial do aluno na URL do PageView, e `/secretaria` é o painel
- * interno — não há o que medir de campanha ali.
+ * levaria a credencial do aluno na URL do PageView, assim como `/lembretes/parar`
+ * levaria o link assinado de descadastro, e `/secretaria` é o painel interno —
+ * não há o que medir de campanha ali. `/retomar` só redireciona, mas fica na
+ * lista para o link assinado nunca ser medido, nem por engano.
  */
-const ROTAS_SEM_PIXEL = /^\/(validar|secretaria)(\/|$)/
+const ROTAS_SEM_PIXEL = /^\/(validar|secretaria|lembretes|retomar)(\/|$)/
 
 /** Teto da fila de antes da escolha: o funil inteiro cabe folgado nisso. */
 const LIMITE_DA_FILA = 50
